@@ -56,7 +56,8 @@ function showError(sel, msg) {
 const state = {
   status: null,
   tracks: [],
-  prefs: { cadence: 170, tolerance: 3, half: true, order: "bpm", privacy: "PRIVATE" },
+  prefs: { cadence: 170, tolerance: 3, half: true, order: "bpm", privacy: "PRIVATE", genres: [] },
+  showAllGenres: false,
   excluded: new Set(),
   tab: "matches",
   search: "",
@@ -72,9 +73,30 @@ function matchKind(bpm, cadence, tol, half) {
   return null;
 }
 
+function genreOk(t) {
+  const want = state.prefs.genres;
+  return !want.length || (t.genres || []).some((g) => want.includes(g));
+}
+
+// kind: "full" | "half" | null  (tempo match, ignoring genre)
+// match: tempo match AND genre filter
 function classify() {
   const { cadence, tolerance, half } = state.prefs;
-  return state.tracks.map((t, i) => ({ ...t, idx: i, kind: matchKind(t.bpm, cadence, tolerance, half) }));
+  return state.tracks.map((t, i) => {
+    const kind = matchKind(t.bpm, cadence, tolerance, half);
+    return { ...t, idx: i, kind, match: !!kind && genreOk(t) };
+  });
+}
+
+function genreLabel(list) {
+  const cap = (g) => g.replace(/\b\w/g, (c) => c.toUpperCase());
+  if (list.length <= 2) return list.map(cap).join(" & ");
+  return `${list.slice(0, 2).map(cap).join(", ")} +${list.length - 2}`;
+}
+
+function defaultName() {
+  const g = state.prefs.genres;
+  return `Running ${state.prefs.cadence} spm` + (g.length ? ` · ${genreLabel(g)}` : "");
 }
 
 function ordered(list) {
@@ -91,11 +113,21 @@ function ordered(list) {
 }
 
 // ------------------------------------------------------------------ prefs
-let prefsTimer;
+let prefsTimer = null;
 function savePrefs() {
   clearTimeout(prefsTimer);
-  prefsTimer = setTimeout(() => api("/api/settings", { prefs: state.prefs }).catch(() => {}), 500);
+  prefsTimer = setTimeout(() => {
+    prefsTimer = null;
+    api("/api/settings", { prefs: state.prefs }).catch(() => {});
+  }, 500);
 }
+// If the page is closed or reloaded before the debounce fires, send the settings right away.
+window.addEventListener("pagehide", () => {
+  if (prefsTimer === null) return;
+  clearTimeout(prefsTimer);
+  const blob = new Blob([JSON.stringify({ prefs: state.prefs })], { type: "application/json" });
+  navigator.sendBeacon("/api/settings", blob);
+});
 
 function syncControls() {
   const p = state.prefs;
@@ -120,7 +152,7 @@ function syncControls() {
     line2.innerHTML = `<span class="swatch half"></span>Half-time at <b>${num(lo / 2)}–${num(hi / 2)}</b> BPM`;
     rd.append(line2);
   }
-  if (!state.nameEdited) $("#in-name").value = `Running ${p.cadence} spm`;
+  if (!state.nameEdited) $("#in-name").value = defaultName();
 }
 
 function setPref(key, value) {
@@ -133,15 +165,17 @@ function setPref(key, value) {
 // ------------------------------------------------------------------ render
 function render() {
   const all = classify();
-  const matches = all.filter((t) => t.kind);
+  const matches = all.filter((t) => t.match);
   const missing = all.filter((t) => t.bpm == null);
+  const allShown = all.filter(genreOk);
+  renderGenres(all);
 
   $("#count-matches").textContent = matches.length;
   $("#count-missing").textContent = missing.length;
-  $("#count-all").textContent = all.length;
+  $("#count-all").textContent = allShown.length;
   $$(".tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === state.tab));
 
-  const base = state.tab === "matches" ? matches : state.tab === "missing" ? missing : all;
+  const base = state.tab === "matches" ? matches : state.tab === "missing" ? missing : allShown;
   const q = state.search.trim().toLowerCase();
   const shown = ordered(base).filter((t) => !q || `${t.title} ${t.artist}`.toLowerCase().includes(q));
 
@@ -175,6 +209,10 @@ function render() {
         ["Scan liked songs", () => $("#btn-scan").click()]));
     } else if (q) {
       empty.append(emptyBlock("Nothing matches that filter", "Try a different word, or clear the filter box."));
+    } else if (state.prefs.genres.length && state.tab !== "missing") {
+      empty.append(emptyBlock(`No ${genreLabel(state.prefs.genres)} songs ${state.tab === "matches" ? `at ${state.prefs.cadence} spm` : "in this scan"}`,
+        "Try another genre, or more wiggle room.",
+        ["Any genre", () => setPref("genres", [])]));
     } else if (state.tab === "matches") {
       empty.append(emptyBlock(`No songs at ${state.prefs.cadence} spm yet`,
         "Try more wiggle room, switch on half-time songs, or add BPMs for the songs that need one.",
@@ -229,7 +267,8 @@ function rowFor(t) {
   const text = document.createElement("div");
   text.className = "song-text";
   const ti = document.createElement("div"); ti.className = "song-title"; ti.textContent = t.title;
-  const ar = document.createElement("div"); ar.className = "song-artist"; ar.textContent = t.artist;
+  const ar = document.createElement("div"); ar.className = "song-artist";
+  ar.textContent = t.artist + (t.genres && t.genres.length ? ` · ${t.genres.slice(0, 3).join(", ")}` : "");
   text.append(ti, ar);
 
   const meta = document.createElement("span");
@@ -249,6 +288,53 @@ function rowFor(t) {
 }
 
 function setTab(tab) { state.tab = tab; render(); }
+
+// ---------------------------------------------------------------- genres
+const GENRE_PREVIEW = 12;
+function renderGenres(all) {
+  const libCount = new Map(), matchCount = new Map();
+  for (const t of all) {
+    for (const g of t.genres || []) {
+      libCount.set(g, (libCount.get(g) || 0) + 1);
+      if (t.kind) matchCount.set(g, (matchCount.get(g) || 0) + 1);
+    }
+  }
+  const selected = state.prefs.genres;
+  // keep selected genres visible even if this scan has none of them
+  for (const g of selected) if (!libCount.has(g)) libCount.set(g, 0);
+  const sorted = [...libCount.keys()].sort((a, b) =>
+    (selected.includes(b) - selected.includes(a)) || (libCount.get(b) - libCount.get(a)) || a.localeCompare(b));
+  const visible = state.showAllGenres ? sorted : sorted.slice(0, GENRE_PREVIEW);
+
+  const wrap = $("#genre-chips");
+  wrap.replaceChildren(...visible.map((g) => {
+    const b = document.createElement("button");
+    const n = matchCount.get(g) || 0;
+    b.className = "genre-chip" + (selected.includes(g) ? " on" : "") + (n ? "" : " zero");
+    b.title = `${n} song${n === 1 ? "" : "s"} at ${state.prefs.cadence} spm · ${libCount.get(g)} in this scan`;
+    b.setAttribute("aria-pressed", selected.includes(g));
+    const label = document.createElement("span"); label.textContent = g;
+    const cnt = document.createElement("span"); cnt.className = "n"; cnt.textContent = n;
+    b.append(label, cnt);
+    b.addEventListener("click", () => {
+      const next = selected.includes(g) ? selected.filter((x) => x !== g) : [...selected, g];
+      state.excluded.clear();
+      setPref("genres", next);
+    });
+    return b;
+  }));
+
+  const more = $("#btn-genre-more");
+  more.hidden = sorted.length <= GENRE_PREVIEW;
+  more.textContent = state.showAllGenres ? "Show fewer" : `Show all ${sorted.length} genres`;
+  $("#btn-genre-clear").hidden = selected.length === 0;
+
+  const hint = $("#genre-hint");
+  const haveTempo = all.some((t) => t.bpm != null);
+  if (!all.length) hint.textContent = "Genres appear here after your first scan.";
+  else if (!libCount.size && haveTempo) hint.textContent = "No genres yet. Scan again to fetch them for songs scanned before genres were added.";
+  else hint.textContent = "Genres come from the artist, so treat them as a rough guide. Pick several to mix them.";
+}
 
 // ---------------------------------------------------------- BPM popover
 let popTrack = null;
@@ -413,13 +499,15 @@ function wire() {
   $("#in-order").addEventListener("change", (e) => setPref("order", e.target.value));
   $("#in-privacy").addEventListener("change", (e) => setPref("privacy", e.target.value));
   $("#btn-reshuffle").addEventListener("click", () => { state.shuffleKey.clear(); render(); });
+  $("#btn-genre-clear").addEventListener("click", () => setPref("genres", []));
+  $("#btn-genre-more").addEventListener("click", () => { state.showAllGenres = !state.showAllGenres; render(); });
   $("#in-name").addEventListener("input", () => { state.nameEdited = $("#in-name").value.trim() !== ""; });
 
   // tabs, search, select all
   $$(".tab").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
   $("#in-search").addEventListener("input", (e) => { state.search = e.target.value; render(); });
   $("#check-all").addEventListener("change", (e) => {
-    const matches = classify().filter((t) => t.kind);
+    const matches = classify().filter((t) => t.match);
     if (e.target.checked) state.excluded.clear();
     else matches.forEach((t) => state.excluded.add(t.video_id));
     render();
@@ -432,8 +520,8 @@ function wire() {
   // create playlist
   $("#btn-create").addEventListener("click", async () => {
     const btn = $("#btn-create");
-    const matches = ordered(classify().filter((t) => t.kind)).filter((t) => !state.excluded.has(t.video_id));
-    const name = $("#in-name").value.trim() || `Running ${state.prefs.cadence} spm`;
+    const matches = ordered(classify().filter((t) => t.match)).filter((t) => !state.excluded.has(t.video_id));
+    const name = $("#in-name").value.trim() || defaultName();
     const p = state.prefs;
     btn.disabled = true;
     btn.textContent = "Saving…";
@@ -442,7 +530,7 @@ function wire() {
         name,
         privacy: p.privacy,
         video_ids: matches.map((t) => t.video_id),
-        description: `${matches.length} songs for ${p.cadence} spm (${p.cadence - p.tolerance}–${p.cadence + p.tolerance} BPM${p.half ? ", plus half-time" : ""}).`,
+        description: `${matches.length} songs for ${p.cadence} spm (${p.cadence - p.tolerance}–${p.cadence + p.tolerance} BPM${p.half ? ", plus half-time" : ""})${p.genres.length ? `. Genres: ${p.genres.join(", ")}` : ""}.`,
       });
       const a = document.createElement("a");
       a.href = res.url; a.target = "_blank"; a.rel = "noopener";
@@ -526,6 +614,7 @@ function wire() {
   try {
     const s = await refreshStatus();
     if (s.prefs && typeof s.prefs === "object") Object.assign(state.prefs, s.prefs);
+    if (!Array.isArray(state.prefs.genres)) state.prefs.genres = [];
     if (s.api_key_set && s.ytm_connected) await enterMain();
     else { renderSetup(); showView("setup"); }
   } catch (e) {

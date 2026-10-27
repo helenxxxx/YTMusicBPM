@@ -6,6 +6,7 @@ YouTube Music doesn't know how fast songs are, so Cadence reads your liked songs
 
 - **Cadence slider** with wiggle room (± BPM), so you can see instantly what fits 165, 170 or 180 spm
 - **Half-time songs**: an 85 BPM song works for 170 spm (two steps per beat), which roughly doubles your options
+- **Genre filter**: pick one or more genres (rock, pop, house…) to narrow the matches. Each genre shows how many songs it has at your cadence
 - **Fix tempos by hand**: click any BPM to edit it, with ×2 / ÷2 buttons for songs the database has at double or half speed. Songs the database doesn't know go in the *Needs a BPM* tab
 - **Remembers everything**: each song is only looked up once, so later scans are quick
 - Runs **only on your computer**. Nothing is sent anywhere except YouTube Music and GetSongBPM
@@ -36,11 +37,14 @@ Next time, just `cd` into the folder, activate the virtual environment and run `
 
 1. Pick where your songs come from (*Liked songs* or one of your playlists) and press **Scan for tempos**. The first scan takes a while for a big library (about half a second per song); after that it only looks up new songs.
 2. Set your cadence and wiggle room. The *Matches* tab updates as you go.
-3. Untick any songs you don't want, choose the order (by tempo, library order or shuffled), name the playlist and press **Save to YouTube Music**. Playlists are private unless you choose otherwise.
+3. Optionally pick one or more genres. Songs matching any of them are kept, and the playlist name picks up the genre (e.g. *Running 170 spm · Rock*).
+4. Untick any songs you don't want, choose the order (by tempo, library order or shuffled), name the playlist and press **Save to YouTube Music**. Playlists are private unless you choose otherwise.
 
 Tips:
 - Running at 170 spm? Try **± 3** to start. Your stride adjusts to a slightly off beat without you noticing.
 - Tempo databases sometimes list a song at double or half its real speed. If something sounds wrong, click its BPM and use ×2 / ÷2.
+- Genres come from GetSongBPM's list of the **artist's** main genres, not the individual song, so treat them as a rough guide. Songs GetSongBPM doesn't know have no genre, so they drop out while a genre filter is on.
+- Scanned songs before genres were added? Press **Scan again** once and it fetches their genres.
 - If scans start failing with sign-in errors, your YouTube Music session has expired. Open ⚙️ Settings → **Reconnect** and paste fresh headers.
 
 ## Command line
@@ -50,6 +54,8 @@ The original script still works and shares the same settings and tempo cache:
 ```bash
 python cadence_playlist.py --cadence 170            # preview
 python cadence_playlist.py --cadence 170 --create   # save the playlist
+python cadence_playlist.py --cadence 170 --list-genres          # see which genres you have
+python cadence_playlist.py --cadence 170 --genre rock --genre punk
 python cadence_playlist.py --help
 ```
 
@@ -59,9 +65,9 @@ Everything is stored in the `data/` folder, which git ignores:
 
 | File | What it is |
 |---|---|
-| `config.json` | Your GetSongBPM key and slider settings |
+| `config.json` | Your GetSongBPM key and slider and genre settings |
 | `browser.json` | Your YouTube Music session. **Treat it like a password.** |
-| `bpm_cache.json` | Every tempo looked up so far, plus your manual edits |
+| `bpm_cache.json` | Every tempo and genre looked up so far, plus your manual edits |
 | `library.json` | The songs from your last scan |
 
 Delete the folder to start fresh.

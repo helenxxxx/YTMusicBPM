@@ -12,7 +12,7 @@ import json
 import re
 import threading
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Callable
 
@@ -36,6 +36,7 @@ class Track:
     duration: int = 0          # seconds
     bpm: int | None = None
     bpm_source: str = ""       # "getsongbpm", "manual" or ""
+    genres: list[str] = field(default_factory=list)  # the artist's genres, from GetSongBPM
 
     @property
     def label(self) -> str:
@@ -109,6 +110,11 @@ class BpmCache:
         with self._lock:
             self._data[video_id] = {"bpm": bpm, "source": source, **extra}
 
+    def update(self, video_id: str, **fields) -> None:
+        """Change some fields of an entry, keeping the rest (e.g. keep genres when editing a BPM)."""
+        with self._lock:
+            self._data.setdefault(video_id, {"bpm": None, "source": ""}).update(fields)
+
     def save(self) -> None:
         with self._lock:
             self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -119,20 +125,33 @@ class BpmCache:
 
 # -------------------------------------------------------------------- BPM lookup
 
-LookupFn = Callable[[str, str], "int | None"]
+# A lookup takes (title, artist) and returns (bpm, genres), or None if the song isn't found.
+# Genres are the artist's main genres as listed by GetSongBPM (it has no per-song genres).
+LookupResult = "tuple[int | None, list[str]] | None"
+LookupFn = Callable[[str, str], LookupResult]
 
 
 def make_getsongbpm_lookup(api_key: str, session: requests.Session | None = None) -> LookupFn:
     session = session or requests.Session()
 
-    def lookup(title: str, artist: str) -> int | None:
-        return lookup_bpm(session, api_key, title, artist)
+    def lookup(title: str, artist: str):
+        return lookup_song(session, api_key, title, artist)
 
     return lookup
 
 
-def lookup_bpm(session, api_key: str, title: str, artist: str) -> int | None:
-    """Ask GetSongBPM for the tempo of one song. Returns None if not found."""
+def clean_genres(raw) -> list[str]:
+    out: list[str] = []
+    for g in raw or []:
+        if isinstance(g, str):
+            g = re.sub(r"\s+", " ", g).strip().lower()
+            if g and g not in out:
+                out.append(g)
+    return out
+
+
+def lookup_song(session, api_key: str, title: str, artist: str):
+    """Ask GetSongBPM for one song. Returns (bpm, genres), or None if not found."""
     params = {
         "api_key": api_key,
         "type": "both",
@@ -170,12 +189,34 @@ def lookup_bpm(session, api_key: str, title: str, artist: str) -> int | None:
     if best is None or best[0] < 2:  # require at least an exact title match
         return None
     try:
-        return int(round(float(best[1]["tempo"])))
+        bpm = int(round(float(best[1]["tempo"])))
     except (TypeError, ValueError):
         return None
+    return bpm, clean_genres((best[1].get("artist") or {}).get("genres"))
+
+
+def lookup_bpm(session, api_key: str, title: str, artist: str) -> int | None:
+    """Tempo only (kept for simple callers and tests)."""
+    res = lookup_song(session, api_key, title, artist)
+    return res[0] if res else None
 
 
 ProgressFn = Callable[[int, int, "Track"], None]
+
+
+def _needs_lookup(entry: dict | None) -> bool:
+    if entry is None:
+        return True
+    # Songs found before genre support was added: fetch again once to pick up genres.
+    return "genres" not in entry and entry.get("source") in ("getsongbpm", "manual")
+
+
+def _normalise(res) -> tuple[int | None, list[str]]:
+    if res is None:
+        return None, []
+    if isinstance(res, tuple):
+        return res[0], clean_genres(res[1] if len(res) > 1 else [])
+    return res, []  # plain int from a simple lookup function
 
 
 def enrich(
@@ -186,17 +227,21 @@ def enrich(
     should_stop: Callable[[], bool] | None = None,
     pause: float = REQUEST_PAUSE,
 ) -> None:
-    """Fill in track.bpm, looking up only songs that aren't cached yet."""
-    todo = [t for t in tracks if t.video_id not in cache]
+    """Fill in track.bpm and track.genres, looking up only songs that need it."""
+    todo = [t for t in tracks if _needs_lookup(cache.get(t.video_id))]
     for i, t in enumerate(todo, 1):
         if should_stop and should_stop():
             break
         try:
-            bpm = lookup(clean_title(t.title), clean_artist(t.artist))
+            bpm, genres = _normalise(lookup(clean_title(t.title), clean_artist(t.artist)))
         except requests.RequestException:
-            bpm = "retry"  # network hiccup: leave uncached so the next scan tries again
-        if bpm != "retry":
-            cache.set(t.video_id, bpm, "getsongbpm" if bpm else "", title=t.title, artist=t.artist)
+            bpm = genres = None  # network hiccup: leave as is so the next scan tries again
+        if genres is not None:
+            old = cache.get(t.video_id)
+            if old and old.get("source") == "manual":
+                cache.update(t.video_id, genres=genres)  # keep the BPM you typed in
+            else:
+                cache.set(t.video_id, bpm, "getsongbpm" if bpm else "", title=t.title, artist=t.artist, genres=genres)
         if progress:
             progress(i, len(todo), t)
         if i % 20 == 0:
@@ -209,9 +254,18 @@ def enrich(
 
 def apply_cache(tracks: list[Track], cache: BpmCache) -> None:
     for t in tracks:
-        entry = cache.get(t.video_id)
-        t.bpm = entry.get("bpm") if entry else None
-        t.bpm_source = (entry.get("source") or "") if entry else ""
+        entry = cache.get(t.video_id) or {}
+        t.bpm = entry.get("bpm")
+        t.bpm_source = entry.get("source") or ""
+        t.genres = list(entry.get("genres") or [])
+
+
+def genre_matches(track_genres: list[str], wanted: list[str]) -> bool:
+    """True if no genre filter is set, or the track has any of the wanted genres."""
+    if not wanted:
+        return True
+    wanted = {w.strip().lower() for w in wanted}
+    return any(g in wanted for g in track_genres)
 
 
 # --------------------------------------------------------------------- matching

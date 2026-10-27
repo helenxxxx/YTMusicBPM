@@ -185,3 +185,52 @@ def test_real_mode_needs_setup(tmp_path):
     assert c.get("/api/sources").status_code == 409
     r = c.post("/api/connect", json={"headers": "accept: */*"})
     assert r.status_code == 400 and "cookie" in r.get_json()["error"]
+
+
+# ------------------------------------------------------------------- genres
+
+def test_lookup_returns_artist_genres():
+    s = mock.Mock()
+    s.get.return_value = Resp(200, {"search": [
+        {"title": "Mr. Brightside", "tempo": "148",
+         "artist": {"name": "The Killers", "genres": ["Rock", " alternative rock ", "rock"]}},
+    ]})
+    assert core.lookup_song(s, "k", "Mr. Brightside", "The Killers") == (148, ["rock", "alternative rock"])
+
+
+def test_genre_matches():
+    assert core.genre_matches(["rock", "punk"], [])
+    assert core.genre_matches(["rock", "punk"], ["Punk"])
+    assert not core.genre_matches(["pop"], ["rock"])
+    assert not core.genre_matches([], ["rock"])
+
+
+def test_old_cache_entries_are_backfilled_with_genres(tmp_path):
+    cache = BpmCache(tmp_path / "c.json")
+    cache.set("a", 170, "getsongbpm")          # found before genres existed
+    cache.set("b", None, "")                  # not found before: don't ask again
+    cache.set("c", 85, "manual")              # typed in by hand: keep the BPM
+    tracks = [Track("a", "A", "X"), Track("b", "B", "X"), Track("c", "C", "X")]
+    calls = []
+
+    def lookup(title, artist):
+        calls.append(title)
+        return (999, ["rock"])
+
+    core.enrich(tracks, cache, lookup, pause=0)
+    assert calls == ["A", "C"]
+    assert (tracks[0].bpm, tracks[0].genres) == (999, ["rock"])
+    assert (tracks[2].bpm, tracks[2].bpm_source, tracks[2].genres) == (85, "manual", ["rock"])
+    calls.clear()
+    core.enrich(tracks, cache, lookup, pause=0)
+    assert calls == []  # nothing left to backfill
+
+
+def test_manual_bpm_edit_keeps_genres(client):
+    c, state = client
+    c.post("/api/scan", json={"source": "liked"})
+    wait_for_scan(c)
+    t = next(t for t in c.get("/api/tracks").get_json()["tracks"] if t["genres"])
+    c.post(f"/api/tracks/{t['video_id']}/bpm", json={"bpm": 172})
+    after = next(x for x in c.get("/api/tracks").get_json()["tracks"] if x["video_id"] == t["video_id"])
+    assert after["bpm"] == 172 and after["genres"] == t["genres"]

@@ -223,7 +223,7 @@ def create_app(data_dir: Path, demo: bool = False) -> Flask:
     def set_bpm(video_id):
         bpm = (request.get_json(force=True) or {}).get("bpm")
         if bpm in ("", None):
-            state.cache.set(video_id, None, "manual")
+            state.cache.update(video_id, bpm=None, source="manual")
         else:
             try:
                 bpm = int(round(float(bpm)))
@@ -231,7 +231,7 @@ def create_app(data_dir: Path, demo: bool = False) -> Flask:
                 return err("BPM must be a number.")
             if not 30 <= bpm <= 300:
                 return err("BPM should be between 30 and 300.")
-            state.cache.set(video_id, bpm, "manual")
+            state.cache.update(video_id, bpm=bpm, source="manual")
         state.cache.save()
         return jsonify(ok=True, bpm=bpm)
 

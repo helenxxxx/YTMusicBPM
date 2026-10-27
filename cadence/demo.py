@@ -72,9 +72,22 @@ class FakeYTMusic:
         return pid
 
 
+_GENRES = {
+    "Neon Harbour": ["synth-pop", "pop"], "The Paper Kites Club": ["indie", "rock"],
+    "Juno Vale": ["pop", "dance pop"], "Static Bloom": ["indie", "electronic"],
+    "Marlowe & Finch": ["folk", "indie"], "Kitelines": ["electronic", "dance"],
+    "Velvet Arcade": ["rock", "alternative"], "Ruby Tramline": ["pop"],
+    "Northbound Echo": ["hip hop", "rap"], "Cleo Sparks": ["pop", "r&b"],
+    "The Midnight Allotment": ["indie", "rock"], "Glass Pylon": ["electronic", "house"],
+    "Harbour Lights FC": ["rock", "punk"], "Sunday Amps": ["rock", "alternative"],
+    "Ivy Racket": ["punk", "rock"],
+}
+
+
 def fake_lookup(title: str, artist: str):
     # The real lookup receives a cleaned-up artist ("Marlowe & Finch" -> "Marlowe"), so match on prefix.
     for s in LIBRARY:
-        if s["title"] == title and s["artists"][0]["name"].startswith(artist):
-            return s["_bpm"]
+        name = s["artists"][0]["name"]
+        if s["title"] == title and name.startswith(artist):
+            return (s["_bpm"], _GENRES.get(name, [])) if s["_bpm"] else None
     return None
