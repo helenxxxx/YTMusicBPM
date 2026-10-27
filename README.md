@@ -76,9 +76,18 @@ cadence/ytm.py          YouTube Music wrapper (ytmusicapi)
 cadence/server.py       local Flask server and JSON API
 cadence/demo.py         made-up library for --demo
 cadence/static/         the web page (HTML, CSS, JS)
-tests/                  pytest tests (run: pip install pytest && pytest)
+tests/                  pytest tests (run: pip install -r requirements-dev.txt && pytest)
 ```
 
-## Credits
+## Built with
 
-Tempo data from [GetSongBPM](https://getsongbpm.com). YouTube Music access via [ytmusicapi](https://github.com/sigma67/ytmusicapi), which is unofficial and not affiliated with Google or YouTube.
+| Project | What it does here | Licence |
+|---|---|---|
+| [ytmusicapi](https://github.com/sigma67/ytmusicapi) | Reads your YouTube Music library and creates playlists | MIT |
+| [Flask](https://github.com/pallets/flask) | Runs the local web server | BSD-3-Clause |
+| [Requests](https://github.com/psf/requests) | Talks to the GetSongBPM API | Apache-2.0 |
+| [pytest](https://github.com/pytest-dev/pytest) | Runs the tests (development only) | MIT |
+
+Tempo data comes from [GetSongBPM](https://getsongbpm.com). ytmusicapi is unofficial and not affiliated with Google or YouTube.
+
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) has full credits, licence details and related projects.

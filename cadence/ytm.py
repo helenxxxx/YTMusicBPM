@@ -1,4 +1,7 @@
-"""Thin wrapper around ytmusicapi (the unofficial YouTube Music library)."""
+"""Thin wrapper around ytmusicapi, the unofficial YouTube Music library.
+
+ytmusicapi: https://github.com/sigma67/ytmusicapi (MIT licence)
+"""
 
 from __future__ import annotations
 

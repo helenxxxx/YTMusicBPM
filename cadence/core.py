@@ -1,6 +1,9 @@
 """Core logic: title clean-up, BPM lookup via GetSongBPM, caching and cadence matching.
 
 Nothing in here knows about the web UI, so the CLI and the server share it.
+
+Tempo data: GetSongBPM API, https://getsongbpm.com/api (its terms require a link back to getsongbpm.com).
+HTTP: Requests, https://github.com/psf/requests (Apache-2.0)
 """
 
 from __future__ import annotations
