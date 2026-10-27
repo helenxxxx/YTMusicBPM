@@ -1,0 +1,16 @@
+# personal data: never commit
+data/
+browser.json
+oauth.json
+*.har
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# os
+.DS_Store
+Thumbs.db

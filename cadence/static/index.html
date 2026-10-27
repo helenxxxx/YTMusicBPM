@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cadence Playlist</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23ff5a1f'/%3E%3Cpath d='M5 17h5l3-8 5 15 3-7h6' fill='none' stroke='white' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8"/><path d="M5 17h5l3-8 5 15 3-7h6"/></svg>
+      <span class="brand-name">Cadence</span>
+      <span id="demo-badge" class="badge-demo" hidden>Demo</span>
+    </div>
+    <div class="topbar-right">
+      <span id="chip-ytm" class="chip"><span class="dot"></span>YouTube Music</span>
+      <span id="chip-key" class="chip"><span class="dot"></span>BPM data</span>
+      <button id="btn-settings" class="icon-btn" title="Settings" aria-label="Settings">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ================================================================ SETUP -->
+  <main id="view-setup" class="setup" hidden>
+    <div class="setup-intro">
+      <h1>Playlists that keep pace with you</h1>
+      <p>Cadence finds the songs in your YouTube Music library that match your running cadence, then saves them as a playlist. Two one-off steps to get going.</p>
+    </div>
+
+    <section class="setup-step" id="step-key">
+      <div class="step-num"><span>1</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+      <div class="step-body">
+        <h2>Add a GetSongBPM API key</h2>
+        <p>YouTube Music doesn't know song tempos, so Cadence looks them up in the free <a href="https://getsongbpm.com/api" target="_blank" rel="noopener">GetSongBPM</a> database. Sign up there for a free key and paste it here.</p>
+        <form class="inline-form" id="form-key">
+          <input id="input-key" type="password" placeholder="Your API key" autocomplete="off" spellcheck="false" required>
+          <button class="btn btn-primary" type="submit">Save key</button>
+        </form>
+        <p class="step-done-msg">Key saved.</p>
+        <p class="form-error" id="err-key" hidden></p>
+      </div>
+    </section>
+
+    <section class="setup-step" id="step-ytm">
+      <div class="step-num"><span>2</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+      <div class="step-body">
+        <h2>Connect YouTube Music</h2>
+        <p>There's no official YouTube Music API, so Cadence borrows your signed-in browser session. It takes a minute:</p>
+        <ol class="howto">
+          <li>Open <a href="https://music.youtube.com" target="_blank" rel="noopener">music.youtube.com</a> in Chrome or Firefox and make sure you're signed in.</li>
+          <li>Open developer tools (<kbd>F12</kbd>, or <kbd>⌘</kbd><kbd>⌥</kbd><kbd>I</kbd> on a Mac) and choose the <b>Network</b> tab.</li>
+          <li>Type <code>browse</code> in the filter box, then click <b>Library</b> on the YouTube Music page.</li>
+          <li>Right-click the <code>browse?…</code> request that appears.
+            <span class="howto-sub"><b>Chrome:</b> Copy → Copy request headers. <b>Firefox:</b> Copy Value → Copy Request Headers.</span></li>
+          <li>Paste it below.</li>
+        </ol>
+        <form id="form-ytm">
+          <textarea id="input-headers" rows="5" placeholder="accept: */*&#10;authorization: SAPISIDHASH …&#10;cookie: …" spellcheck="false" required></textarea>
+          <div class="form-row">
+            <span class="hint">Saved only on this computer, in <code>data/browser.json</code>.</span>
+            <button class="btn btn-primary" type="submit" id="btn-connect">Connect</button>
+          </div>
+        </form>
+        <p class="step-done-msg">Connected.</p>
+        <p class="form-error" id="err-ytm" hidden></p>
+      </div>
+    </section>
+
+    <div class="setup-footer">
+      <button class="btn btn-primary btn-lg" id="btn-setup-done" disabled>Start building playlists</button>
+    </div>
+  </main>
+
+  <!-- ================================================================= MAIN -->
+  <main id="view-main" class="layout" hidden>
+    <aside class="sidebar">
+      <section class="card cadence-card">
+        <div class="card-label">Your cadence</div>
+        <div class="cadence-dial">
+          <button class="step-btn" data-step="-1" aria-label="Lower cadence">−</button>
+          <div class="cadence-value"><output id="out-cadence">170</output><span>steps / min</span></div>
+          <button class="step-btn" data-step="1" aria-label="Raise cadence">+</button>
+        </div>
+        <input id="in-cadence" type="range" min="140" max="200" step="1" value="170" aria-label="Cadence">
+        <div class="range-scale"><span>140</span><span>170</span><span>200</span></div>
+
+        <div class="field">
+          <div class="field-head"><label for="in-tol">Wiggle room</label><output id="out-tol">± 3 BPM</output></div>
+          <input id="in-tol" type="range" min="1" max="8" step="1" value="3">
+        </div>
+
+        <label class="toggle">
+          <input type="checkbox" id="in-half" checked>
+          <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          <span class="toggle-text">Include half-time songs<small id="half-hint">e.g. 85 BPM, two steps per beat</small></span>
+        </label>
+
+        <p class="range-readout" id="range-readout"></p>
+      </section>
+
+      <section class="card">
+        <div class="card-label">Songs from</div>
+        <select id="in-source" aria-label="Song source"><option value="liked">Liked songs</option></select>
+        <button class="btn btn-secondary btn-block" id="btn-scan">Scan for tempos</button>
+        <div class="scan-progress" id="scan-progress" hidden>
+          <div class="bar"><div class="bar-fill" id="bar-fill"></div></div>
+          <div class="scan-meta"><span id="scan-text">Starting…</span><button class="link-btn" id="btn-stop">Stop</button></div>
+        </div>
+        <p class="hint" id="scan-info"></p>
+        <p class="form-error" id="err-scan" hidden></p>
+      </section>
+    </aside>
+
+    <section class="results">
+      <div class="results-head">
+        <div class="tabs" role="tablist">
+          <button class="tab active" data-tab="matches" role="tab">Matches <span class="count" id="count-matches">0</span></button>
+          <button class="tab" data-tab="missing" role="tab">Needs a BPM <span class="count" id="count-missing">0</span></button>
+          <button class="tab" data-tab="all" role="tab">All songs <span class="count" id="count-all">0</span></button>
+        </div>
+        <input type="search" id="in-search" placeholder="Filter songs" aria-label="Filter songs">
+      </div>
+
+      <div class="list-tools" id="list-tools">
+        <label class="check-all"><input type="checkbox" id="check-all" checked> <span id="select-summary">All selected</span></label>
+        <span class="list-tools-right">
+          <label for="in-order">Order</label>
+          <select id="in-order">
+            <option value="bpm">By tempo</option>
+            <option value="library">Library order</option>
+            <option value="shuffle">Shuffled</option>
+          </select>
+          <button class="link-btn" id="btn-reshuffle" hidden title="Shuffle again">↻</button>
+        </span>
+      </div>
+
+      <ul class="song-list" id="song-list"></ul>
+      <div class="empty" id="empty" hidden></div>
+
+      <footer class="action-bar" id="action-bar">
+        <div class="action-summary">
+          <strong id="sum-songs">0 songs</strong>
+          <span id="sum-time">0 min</span>
+        </div>
+        <input id="in-name" type="text" placeholder="Playlist name" aria-label="Playlist name">
+        <select id="in-privacy" aria-label="Privacy">
+          <option value="PRIVATE">Private</option>
+          <option value="UNLISTED">Unlisted</option>
+          <option value="PUBLIC">Public</option>
+        </select>
+        <button class="btn btn-primary" id="btn-create">Save to YouTube Music</button>
+      </footer>
+    </section>
+  </main>
+
+  <footer class="credits">Tempo data from <a href="https://getsongbpm.com" target="_blank" rel="noopener">GetSongBPM</a>. Runs only on your computer.</footer>
+
+  <!-- ============================================================= DIALOGS -->
+  <dialog id="dlg-settings">
+    <form method="dialog" class="dlg">
+      <h2>Settings</h2>
+      <div class="dlg-row">
+        <div><b>GetSongBPM API key</b><p class="hint" id="set-key-state"></p></div>
+        <button type="button" class="btn btn-secondary" id="set-change-key">Change</button>
+      </div>
+      <div class="dlg-row">
+        <div><b>YouTube Music</b><p class="hint" id="set-ytm-state"></p></div>
+        <button type="button" class="btn btn-secondary" id="set-reconnect">Reconnect</button>
+      </div>
+      <p class="hint">If scans start failing with sign-in errors, your YouTube Music session has probably expired. Reconnect and paste fresh headers.</p>
+      <div class="dlg-actions"><button class="btn btn-primary" value="close">Done</button></div>
+    </form>
+  </dialog>
+
+  <div class="popover" id="bpm-pop" hidden>
+    <div class="pop-title" id="pop-title"></div>
+    <div class="pop-row">
+      <input id="pop-input" type="number" min="30" max="300" inputmode="numeric" placeholder="BPM">
+      <button class="btn btn-secondary btn-sm" data-mult="0.5" title="Halve">÷2</button>
+      <button class="btn btn-secondary btn-sm" data-mult="2" title="Double">×2</button>
+    </div>
+    <a id="pop-lookup" target="_blank" rel="noopener" class="pop-link">Search the web for this song's BPM ↗</a>
+    <div class="pop-actions">
+      <button class="link-btn" id="pop-clear">Clear</button>
+      <span></span>
+      <button class="btn btn-secondary btn-sm" id="pop-cancel">Cancel</button>
+      <button class="btn btn-primary btn-sm" id="pop-save">Save</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" hidden></div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
