@@ -39,6 +39,7 @@ Next time, just `cd` into the folder, activate the virtual environment and run `
 2. Set your cadence and wiggle room. The *Matches* tab updates as you go.
 3. Optionally pick one or more genres. Songs matching any of them are kept, and the playlist name picks up the genre (e.g. *Running 170 spm · Rock*).
 4. Untick any songs you don't want, choose the order (by tempo, library order or shuffled), name the playlist and press **Save to YouTube Music**. Playlists are private unless you choose otherwise.
+5. Want songs you don't have yet? Open **Discover** and press **Find new songs**. Cadence plays YouTube Music's radio for a few of your songs at this cadence, looks up the tempos of what it suggests, and lists the ones that fit. Tick any you like and they go in the playlist too. **Find more** adds another batch.
 
 Tips:
 - Running at 170 spm? Try **± 3** to start. Your stride adjusts to a slightly off beat without you noticing.
@@ -71,6 +72,7 @@ Everything is stored in the `data/` folder, which git ignores:
 | `browser.json` | Your YouTube Music session. **Treat it like a password.** |
 | `bpm_cache.json` | Every tempo and genre looked up so far, plus your manual edits |
 | `library.json` | The songs from your last scan |
+| `discover.json` | Songs found with Discover |
 
 Delete the folder to start fresh.
 

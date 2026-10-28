@@ -345,3 +345,41 @@ def test_manual_bpm_edit_keeps_genres(client):
     c.post(f"/api/tracks/{t['video_id']}/bpm", json={"bpm": 172})
     after = next(x for x in c.get("/api/tracks").get_json()["tracks"] if x["video_id"] == t["video_id"])
     assert after["bpm"] == 172 and after["genres"] == t["genres"]
+
+
+# ------------------------------------------------------------------ discover
+
+def test_discover_finds_new_songs_at_your_cadence(client):
+    c, state = client
+    assert c.post("/api/discover", json={"cadence": 170}).status_code == 200
+    job = wait_for_scan(c)
+    assert job["state"] == "error" and "Scan your songs first" in job["error"]  # nothing to start from
+
+    c.post("/api/scan", json={"source": "liked"})
+    wait_for_scan(c)
+    assert c.post("/api/discover", json={"cadence": 170, "tolerance": 3, "half": True}).status_code == 200
+    job = wait_for_scan(c)
+    assert job["state"] == "done" and job["found"] > 0
+    body = c.get("/api/tracks").get_json()
+    mine = {t["video_id"] for t in body["tracks"]}
+    found = body["discover"]
+    assert len(found) == job["found"]
+    assert not mine & {t["video_id"] for t in found}         # only songs you don't have
+    assert any(t["bpm"] for t in found)                      # with tempos looked up
+    assert len({t["video_id"] for t in found}) == len(found)  # no duplicates
+
+    c.post("/api/discover", json={"cadence": 170})          # "Find more" adds to the list
+    wait_for_scan(c)
+    again = c.get("/api/tracks").get_json()["discover"]
+    assert len(again) >= len(found) and len({t["video_id"] for t in again}) == len(again)
+
+
+def test_fetch_radio_parses_tracks():
+    yt = mock.Mock()
+    yt.get_watch_playlist.return_value = {"tracks": [
+        {"videoId": "seed", "title": "Seed", "artists": [{"name": "A"}], "length": "3:00"},
+        {"videoId": "x1", "title": "New One", "artists": [{"name": "B"}, {"name": "C"}], "length": "1:02:03"},
+        {"videoId": None, "title": "Unavailable"},
+    ]}
+    out = ytm.fetch_radio(yt, "seed")
+    assert [(t.video_id, t.artist, t.duration) for t in out] == [("x1", "B, C", 3723)]

@@ -101,6 +101,31 @@ def fetch_tracks(yt, source: str, limit: int | None = 2000) -> list[Track]:
     return tracks
 
 
+def _seconds(length: str | None) -> int:
+    """'3:45' or '1:02:03' -> seconds."""
+    try:
+        secs = 0
+        for part in (length or "").split(":"):
+            secs = secs * 60 + int(part)
+        return secs
+    except ValueError:
+        return 0
+
+
+def fetch_radio(yt, video_id: str, limit: int = 25) -> list[Track]:
+    """Songs YouTube Music's radio plays after this one (its 'similar songs')."""
+    data = yt.get_watch_playlist(videoId=video_id, radio=True, limit=limit)
+    tracks = []
+    for item in (data or {}).get("tracks", []):
+        vid = item.get("videoId")
+        if not vid or vid == video_id:
+            continue
+        artists = ", ".join(a["name"] for a in (item.get("artists") or []) if a.get("name"))
+        tracks.append(Track(video_id=vid, title=item.get("title", ""), artist=artists or "Unknown",
+                            duration=_seconds(item.get("length"))))
+    return tracks[:limit]  # YouTube Music treats limit as a minimum and often sends twice as many
+
+
 def create_playlist(yt, name: str, description: str, video_ids: list[str], privacy: str = "PRIVATE") -> str:
     result = yt.create_playlist(name, description, privacy_status=privacy, video_ids=video_ids)
     if not isinstance(result, str):
