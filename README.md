@@ -43,6 +43,7 @@ Next time, just `cd` into the folder, activate the virtual environment and run `
 Tips:
 - Running at 170 spm? Try **± 3** to start. Your stride adjusts to a slightly off beat without you noticing.
 - Tempo databases sometimes list a song at double or half its real speed. If something sounds wrong, click its BPM and use ×2 / ÷2.
+- Filling in *Needs a BPM*: click **add**, use **songbpm.com ↗** to look the song up (or play it and press **T** in time with the beat to tap the tempo), then press Enter. The editor moves straight on to the next song without a tempo.
 - Genres are a rough guide: Deezer tags the **album** with broad genres (used for ReccoBeats tempos too) (pop, rock, dance), and GetSongBPM lists the **artist's** main genres. Songs neither knows have no genre, so they drop out while a genre filter is on.
 - Songs neither source knew are tried again once when a new source becomes available, such as when you add a GetSongBPM key.
 - Scanned songs before genres were added? Press **Scan again** once and it fetches their genres.

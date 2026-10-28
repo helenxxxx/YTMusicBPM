@@ -283,6 +283,7 @@ function rowFor(t) {
   dur.textContent = fmtTrackTime(t.duration);
   meta.append(dur);
 
+  li.dataset.id = t.video_id;
   li.append(cb, pill, text, meta);
   return li;
 }
@@ -344,7 +345,9 @@ function openBpmPopover(t, anchor) {
   $("#pop-title").textContent = `${t.title} · ${t.artist}`;
   $("#pop-input").value = t.bpm ?? "";
   $("#pop-lookup").href = "https://www.google.com/search?q=" + encodeURIComponent(`${t.artist} ${t.title} bpm`);
+  $("#pop-songbpm").href = "https://www.google.com/search?q=" + encodeURIComponent(`site:songbpm.com ${t.artist.split(",")[0]} ${t.title}`);
   $("#pop-clear").hidden = t.bpm == null;
+  resetTap();
   pop.hidden = false;
   const r = anchor.getBoundingClientRect();
   const w = pop.offsetWidth, h = pop.offsetHeight;
@@ -361,13 +364,46 @@ function closePopover() { $("#bpm-pop").hidden = true; popTrack = null; }
 async function saveBpm(value) {
   if (!popTrack) return;
   const t = popTrack;
+  // Filling in a missing tempo? Remember which song is next, so you can carry on down the list.
+  const missing = t.bpm == null && value != null && value !== ""
+    ? $$(".song-list .song").filter((li) => li.querySelector(".bpm.none")).map((li) => li.dataset.id)
+    : [];
+  const nextId = missing[missing.indexOf(t.video_id) + 1];
   try {
     const res = await api(`/api/tracks/${encodeURIComponent(t.video_id)}/bpm`, { bpm: value });
     const tr = state.tracks.find((x) => x.video_id === t.video_id);
     if (tr) { tr.bpm = res.bpm ?? null; tr.bpm_source = "manual"; }
     closePopover();
     render();
+    const nextPill = nextId && document.querySelector(`.song-list .song[data-id="${CSS.escape(nextId)}"] .bpm`);
+    const next = nextPill && state.tracks.find((x) => x.video_id === nextId);
+    if (next) {
+      nextPill.scrollIntoView({ block: "nearest" });
+      openBpmPopover(next, nextPill);
+    }
   } catch (e) { toast(e.message, { error: true }); }
+}
+
+// Tap tempo: tap along to the song, and the tempo comes from the average gap between taps.
+let taps = [];
+function resetTap() {
+  taps = [];
+  $("#pop-tap-hint").hidden = true;
+}
+function tap() {
+  const now = performance.now();
+  if (taps.length && now - taps[taps.length - 1] > 2000) taps = [];  // a long pause starts over
+  taps.push(now);
+  taps = taps.slice(-16);
+  const hint = $("#pop-tap-hint");
+  hint.hidden = false;
+  if (taps.length < 4) {
+    hint.textContent = `Keep tapping in time… (${taps.length})`;
+    return;
+  }
+  const bpm = Math.round((60000 * (taps.length - 1)) / (taps[taps.length - 1] - taps[0]));
+  $("#pop-input").value = bpm;
+  hint.textContent = `${taps.length} taps · ${bpm} BPM. Pause for 2 seconds to start over.`;
 }
 
 // ------------------------------------------------------------------- scan
@@ -553,7 +589,9 @@ function wire() {
   $("#pop-input").addEventListener("keydown", (e) => {
     if (e.key === "Enter") saveBpm($("#pop-input").value);
     if (e.key === "Escape") closePopover();
+    if (e.key === "t" || e.key === "T") { e.preventDefault(); tap(); }
   });
+  $("#pop-tap").addEventListener("click", () => { tap(); $("#pop-input").focus(); });
   $$("#bpm-pop [data-mult]").forEach((b) => b.addEventListener("click", () => {
     const v = parseFloat($("#pop-input").value);
     if (!isNaN(v)) $("#pop-input").value = Math.round(v * parseFloat(b.dataset.mult));

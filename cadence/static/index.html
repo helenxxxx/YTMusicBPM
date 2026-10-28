@@ -191,8 +191,14 @@
       <input id="pop-input" type="number" min="30" max="300" inputmode="numeric" placeholder="BPM">
       <button class="btn btn-secondary btn-sm" data-mult="0.5" title="Halve">÷2</button>
       <button class="btn btn-secondary btn-sm" data-mult="2" title="Double">×2</button>
+      <button class="btn btn-secondary btn-sm" id="pop-tap" title="Tap in time with the song (or press T)">Tap</button>
     </div>
-    <a id="pop-lookup" target="_blank" rel="noopener" class="pop-link">Search the web for this song's BPM ↗</a>
+    <p class="pop-hint" id="pop-tap-hint" hidden></p>
+    <div class="pop-links">
+      <!-- songbpm.com's own search refuses requests from other sites, so this searches it through Google -->
+      <a id="pop-songbpm" target="_blank" rel="noopener" class="pop-link" title="Find this song on songbpm.com">songbpm.com ↗</a>
+      <a id="pop-lookup" target="_blank" rel="noopener" class="pop-link">Web search ↗</a>
+    </div>
     <div class="pop-actions">
       <button class="link-btn" id="pop-clear">Clear</button>
       <span></span>
