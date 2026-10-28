@@ -8,7 +8,7 @@ Cadence is built on the open-source projects and services below. None of their c
 |---|---|---|---|
 | **ytmusicapi** (sigma67) | Reading your YouTube Music library and creating playlists | MIT | <https://github.com/sigma67/ytmusicapi> · [docs](https://ytmusicapi.readthedocs.io) |
 | **Flask** (Pallets) | The local web server behind the UI | BSD-3-Clause | <https://github.com/pallets/flask> |
-| **Requests** (Python Software Foundation) | Calling the GetSongBPM API | Apache-2.0 | <https://github.com/psf/requests> |
+| **Requests** (Python Software Foundation) | Calling the Deezer and GetSongBPM APIs | Apache-2.0 | <https://github.com/psf/requests> |
 | **pytest** (development only) | Running the tests | MIT | <https://github.com/pytest-dev/pytest> |
 
 Flask also installs its own dependencies from Pallets, such as Werkzeug (BSD-3-Clause, <https://github.com/pallets/werkzeug>) and Jinja (BSD-3-Clause, <https://github.com/pallets/jinja>). These are credited in their own projects.
@@ -17,7 +17,8 @@ Licences checked against the package metadata of ytmusicapi 1.12.3, Flask 3.1.3,
 
 ## Services
 
-- **[GetSongBPM](https://getsongbpm.com)** provides all tempo data. Its [API terms](https://getsongbpm.com/api) ask apps to link back to the site, so the app's footer, every playlist description and this README all include a link to getsongbpm.com.
+- **[Deezer](https://developers.deezer.com)** provides tempo and album genre data through its public API, which needs no key. The app's footer, every playlist description and this README credit Deezer.
+- **[GetSongBPM](https://getsongbpm.com)** optionally provides tempo and artist genre data when you add an API key. Its [API terms](https://getsongbpm.com/api) ask apps to link back to the site, so the app's footer, every playlist description and this README all include a link to getsongbpm.com.
 - **YouTube Music** is accessed through ytmusicapi, which is unofficial and not affiliated with or endorsed by Google or YouTube. Use it in line with [YouTube's Terms of Service](https://www.youtube.com/t/terms).
 
 ## Related projects

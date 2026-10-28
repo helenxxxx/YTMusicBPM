@@ -5,9 +5,9 @@
     python cadence_playlist.py --cadence 170 --create   # create the playlist
     python cadence_playlist.py --cadence 170 --genre rock --genre punk
 
-Uses the same data/ folder as the web app, so connect YouTube Music and add your
-GetSongBPM key in the web app once and this works too. GETSONGBPM_API_KEY in the
-environment overrides the saved key.
+Uses the same data/ folder as the web app, so connect YouTube Music in the web app once
+and this works too. Tempos come from Deezer; a GetSongBPM key (saved in the web app, or
+GETSONGBPM_API_KEY in the environment) is optional and fills in more songs.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ def main() -> None:
     p.add_argument("--tolerance", type=float, default=3, help="allowed BPM difference (default 3)")
     p.add_argument("--no-half-time", action="store_true", help="don't include half-tempo songs")
     p.add_argument("--genre", action="append", default=[], metavar="GENRE",
-                   help="only songs whose artist is tagged with this genre (repeat to allow several)")
+                   help="only songs tagged with this genre (repeat to allow several)")
     p.add_argument("--list-genres", action="store_true", help="show the genres found and stop")
     p.add_argument("--source", default="liked", help="'liked' (default) or a YouTube Music playlist ID")
     p.add_argument("--limit", type=int, default=2000, help="max songs to read from the source")
@@ -42,8 +42,6 @@ def main() -> None:
     except (FileNotFoundError, json.JSONDecodeError):
         saved = ""
     api_key = os.environ.get("GETSONGBPM_API_KEY") or saved
-    if not api_key:
-        sys.exit("No GetSongBPM API key. Add it in the web app (python run.py) or set GETSONGBPM_API_KEY.")
 
     try:
         yt = ytm.connect(DATA / "browser.json")
@@ -62,7 +60,7 @@ def main() -> None:
         print(f"  [{i}/{n}] {t.label}")
 
     try:
-        core.enrich(tracks, cache, core.make_getsongbpm_lookup(api_key), progress=progress)
+        core.enrich(tracks, cache, core.make_lookup(api_key), progress=progress)
     except core.BadApiKey:
         sys.exit("GetSongBPM rejected the API key.")
 
@@ -98,7 +96,7 @@ def main() -> None:
 
     name = args.name or f"Running {args.cadence:g} spm" + (f" · {' & '.join(g.title() for g in args.genre)}" if args.genre else "")
     desc = (f"Songs at {lo:g}-{hi:g} BPM" + (" (plus half-time)" if half else "")
-            + (f". Genres: {', '.join(args.genre)}" if args.genre else "") + ". BPM data: getsongbpm.com")
+            + (f". Genres: {', '.join(args.genre)}" if args.genre else "") + ". BPM data: Deezer and getsongbpm.com")
     pid = ytm.create_playlist(yt, name, desc, [t.video_id for _, t in matches])
     print(f"\nCreated '{name}' with {len(matches)} songs: https://music.youtube.com/playlist?list={pid}")
 

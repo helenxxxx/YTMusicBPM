@@ -1,8 +1,9 @@
-"""Core logic: title clean-up, BPM lookup via GetSongBPM, caching and cadence matching.
+"""Core logic: title clean-up, BPM lookup via Deezer and GetSongBPM, caching and cadence matching.
 
 Nothing in here knows about the web UI, so the CLI and the server share it.
 
-Tempo data: GetSongBPM API, https://getsongbpm.com/api (its terms require a link back to getsongbpm.com).
+Tempo data: Deezer API, https://developers.deezer.com (free, no key needed), and optionally the
+GetSongBPM API, https://getsongbpm.com/api (its terms require a link back to getsongbpm.com).
 HTTP: Requests, https://github.com/psf/requests (Apache-2.0)
 """
 
@@ -19,6 +20,7 @@ from typing import Callable
 import requests
 
 GETSONGBPM_URL = "https://api.getsong.co/search/"
+DEEZER_URL = "https://api.deezer.com/"
 REQUEST_PAUSE = 0.4  # seconds between lookups, to stay friendly with the API's rate limit
 
 
@@ -35,8 +37,8 @@ class Track:
     artist: str
     duration: int = 0          # seconds
     bpm: int | None = None
-    bpm_source: str = ""       # "getsongbpm", "manual" or ""
-    genres: list[str] = field(default_factory=list)  # the artist's genres, from GetSongBPM
+    bpm_source: str = ""       # "getsongbpm", "deezer", "manual" or ""
+    genres: list[str] = field(default_factory=list)  # artist genres (GetSongBPM) or album genres (Deezer)
 
     @property
     def label(self) -> str:
@@ -125,9 +127,12 @@ class BpmCache:
 
 # -------------------------------------------------------------------- BPM lookup
 
-# A lookup takes (title, artist) and returns (bpm, genres), or None if the song isn't found.
-# Genres are the artist's main genres as listed by GetSongBPM (it has no per-song genres).
-LookupResult = "tuple[int | None, list[str]] | None"
+# A lookup takes (title, artist) and returns (bpm, genres) or (bpm, genres, source), or None if
+# the song isn't found. GetSongBPM gives the artist's main genres (it has no per-song genres);
+# Deezer gives the album's genres, which are broader ("Pop", "Rock", "Dance").
+# A lookup may list the sources it asks in a `sources` attribute, so songs no source knew are
+# tried again when a source is added.
+LookupResult = "tuple[int | None, list[str]] | tuple[int | None, list[str], str] | None"
 LookupFn = Callable[[str, str], LookupResult]
 
 
@@ -137,6 +142,24 @@ def make_getsongbpm_lookup(api_key: str, session: requests.Session | None = None
     def lookup(title: str, artist: str):
         return lookup_song(session, api_key, title, artist)
 
+    lookup.sources = ("getsongbpm",)
+    return lookup
+
+
+def make_lookup(api_key: str = "", session: requests.Session | None = None) -> LookupFn:
+    """GetSongBPM first when there's a key (its genres are finer), then Deezer for the rest."""
+    session = session or requests.Session()
+    albums: dict[int, list[str]] = {}
+
+    def lookup(title: str, artist: str):
+        if api_key:
+            res = lookup_song(session, api_key, title, artist)
+            if res:
+                return res[0], res[1], "getsongbpm"
+        res = lookup_deezer(session, title, artist, albums)
+        return (res[0], res[1], "deezer") if res else None
+
+    lookup.sources = ("getsongbpm", "deezer") if api_key else ("deezer",)
     return lookup
 
 
@@ -195,6 +218,60 @@ def lookup_song(session, api_key: str, title: str, artist: str):
     return bpm, clean_genres((best[1].get("artist") or {}).get("genres"))
 
 
+def _deezer_get(session, path: str, params: dict | None = None) -> dict | None:
+    for attempt in range(4):
+        resp = session.get(DEEZER_URL + path, params=params, timeout=20)
+        resp.raise_for_status()
+        body = resp.json()
+        err = body.get("error") if isinstance(body, dict) else None
+        if not err:
+            return body
+        if err.get("code") == 4:  # quota: 50 requests per 5 seconds - wait and retry
+            time.sleep(5 * (attempt + 1))
+            continue
+        return None
+    return None
+
+
+def lookup_deezer(session, title: str, artist: str, albums: dict | None = None):
+    """Ask Deezer for one song. Returns (bpm, album genres), or None if not found.
+
+    Search results don't include tempo, so this fetches the best few matches one by one: many
+    tracks have bpm 0 (unknown), and another release of the same song often has it. Deezer's
+    'artist:"…" track:"…"' search syntax currently finds nothing, so this uses a plain search.
+    """
+    body = _deezer_get(session, "search", {"q": f"{artist} {title}", "limit": 15})
+    want_title, want_artist = _norm(title), _norm(artist)
+    candidates = []
+    for r in (body or {}).get("data") or []:
+        r_titles = {_norm(r.get("title_short") or ""), _norm(clean_title(r.get("title") or ""))}
+        r_artist = _norm((r.get("artist") or {}).get("name", ""))
+        artist_ok = bool(want_artist and r_artist) and (want_artist in r_artist or r_artist in want_artist)
+        if want_title in r_titles and artist_ok:
+            candidates.append(r)
+    for r in candidates[:3]:
+        track = _deezer_get(session, f"track/{r['id']}") or {}
+        try:
+            bpm = int(round(float(track.get("bpm") or 0)))
+        except (TypeError, ValueError):
+            bpm = 0
+        if bpm:
+            return bpm, _deezer_album_genres(session, (track.get("album") or {}).get("id"), albums)
+    return None
+
+
+def _deezer_album_genres(session, album_id, albums: dict | None) -> list[str]:
+    if not album_id:
+        return []
+    if albums is not None and album_id in albums:
+        return albums[album_id]
+    album = _deezer_get(session, f"album/{album_id}") or {}
+    genres = clean_genres(g.get("name") for g in (album.get("genres") or {}).get("data") or [])
+    if albums is not None:
+        albums[album_id] = genres
+    return genres
+
+
 def lookup_bpm(session, api_key: str, title: str, artist: str) -> int | None:
     """Tempo only (kept for simple callers and tests)."""
     res = lookup_song(session, api_key, title, artist)
@@ -204,19 +281,32 @@ def lookup_bpm(session, api_key: str, title: str, artist: str) -> int | None:
 ProgressFn = Callable[[int, int, "Track"], None]
 
 
-def _needs_lookup(entry: dict | None) -> bool:
+def _needs_lookup(entry: dict | None, sources: tuple[str, ...] = ()) -> bool:
     if entry is None:
         return True
     # Songs found before genre support was added: fetch again once to pick up genres.
-    return "genres" not in entry and entry.get("source") in ("getsongbpm", "manual")
+    if "genres" not in entry and entry.get("source") in ("getsongbpm", "manual"):
+        return True
+    # Songs no source knew: try again once a new source is available (Deezer, or a new key).
+    if entry.get("bpm") is None and entry.get("source") != "manual":
+        return any(s not in _tried(entry) for s in sources)
+    return False
 
 
-def _normalise(res) -> tuple[int | None, list[str]]:
+def _tried(entry: dict | None) -> list[str]:
+    """Sources already asked about a cached song. Older entries were only looked up on GetSongBPM."""
+    if entry is None:
+        return []
+    return list(entry.get("tried", ["getsongbpm"]))
+
+
+def _normalise(res) -> tuple[int | None, list[str], str]:
     if res is None:
-        return None, []
+        return None, [], ""
     if isinstance(res, tuple):
-        return res[0], clean_genres(res[1] if len(res) > 1 else [])
-    return res, []  # plain int from a simple lookup function
+        source = res[2] if len(res) > 2 else "getsongbpm"
+        return res[0], clean_genres(res[1] if len(res) > 1 else []), source
+    return res, [], "getsongbpm"  # plain int from a simple lookup function
 
 
 def enrich(
@@ -228,12 +318,13 @@ def enrich(
     pause: float = REQUEST_PAUSE,
 ) -> None:
     """Fill in track.bpm and track.genres, looking up only songs that need it."""
-    todo = [t for t in tracks if _needs_lookup(cache.get(t.video_id))]
+    sources = tuple(getattr(lookup, "sources", ()))
+    todo = [t for t in tracks if _needs_lookup(cache.get(t.video_id), sources)]
     for i, t in enumerate(todo, 1):
         if should_stop and should_stop():
             break
         try:
-            bpm, genres = _normalise(lookup(clean_title(t.title), clean_artist(t.artist)))
+            bpm, genres, source = _normalise(lookup(clean_title(t.title), clean_artist(t.artist)))
         except requests.RequestException:
             bpm = genres = None  # network hiccup: leave as is so the next scan tries again
         if genres is not None:
@@ -241,7 +332,9 @@ def enrich(
             if old and old.get("source") == "manual":
                 cache.update(t.video_id, genres=genres)  # keep the BPM you typed in
             else:
-                cache.set(t.video_id, bpm, "getsongbpm" if bpm else "", title=t.title, artist=t.artist, genres=genres)
+                tried = _tried(old) + [s for s in sources if s not in _tried(old)]
+                cache.set(t.video_id, bpm, source if bpm else "", title=t.title, artist=t.artist,
+                          genres=genres, tried=tried)
         if progress:
             progress(i, len(todo), t)
         if i % 20 == 0:

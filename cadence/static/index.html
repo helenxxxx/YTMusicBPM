@@ -27,25 +27,11 @@
   <main id="view-setup" class="setup" hidden>
     <div class="setup-intro">
       <h1>Playlists that keep pace with you</h1>
-      <p>Cadence finds the songs in your YouTube Music library that match your running cadence, then saves them as a playlist. Two one-off steps to get going.</p>
+      <p>Cadence finds the songs in your YouTube Music library that match your running cadence, then saves them as a playlist. Connect your library once to get going.</p>
     </div>
 
-    <section class="setup-step" id="step-key">
-      <div class="step-num"><span>1</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
-      <div class="step-body">
-        <h2>Add a GetSongBPM API key</h2>
-        <p>YouTube Music doesn't know song tempos, so Cadence looks them up in the free <a href="https://getsongbpm.com/api" target="_blank" rel="noopener">GetSongBPM</a> database. Sign up there for a free key and paste it here.</p>
-        <form class="inline-form" id="form-key">
-          <input id="input-key" type="password" placeholder="Your API key" autocomplete="off" spellcheck="false" required>
-          <button class="btn btn-primary" type="submit">Save key</button>
-        </form>
-        <p class="step-done-msg">Key saved.</p>
-        <p class="form-error" id="err-key" hidden></p>
-      </div>
-    </section>
-
     <section class="setup-step" id="step-ytm">
-      <div class="step-num"><span>2</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+      <div class="step-num"><span>1</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
       <div class="step-body">
         <h2>Connect YouTube Music</h2>
         <p>There's no official YouTube Music API, so Cadence borrows your signed-in browser session. It takes a minute:</p>
@@ -66,6 +52,20 @@
         </form>
         <p class="step-done-msg">Connected.</p>
         <p class="form-error" id="err-ytm" hidden></p>
+      </div>
+    </section>
+
+    <section class="setup-step" id="step-key">
+      <div class="step-num"><span>2</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+      <div class="step-body">
+        <h2>Optional: add a GetSongBPM API key</h2>
+        <p>YouTube Music doesn't know song tempos, so Cadence looks them up on <a href="https://www.deezer.com" target="_blank" rel="noopener">Deezer</a>, which needs no account. Deezer doesn't know every song, so if you have a free <a href="https://getsongbpm.com/api" target="_blank" rel="noopener">GetSongBPM</a> key, paste it here to fill in more tempos and finer genres. You can add it later in Settings.</p>
+        <form class="inline-form" id="form-key">
+          <input id="input-key" type="password" placeholder="Your API key" autocomplete="off" spellcheck="false" required>
+          <button class="btn btn-primary" type="submit">Save key</button>
+        </form>
+        <p class="step-done-msg">Key saved.</p>
+        <p class="form-error" id="err-key" hidden></p>
       </div>
     </section>
 
@@ -166,14 +166,14 @@
     </section>
   </main>
 
-  <footer class="credits">Tempo data from <a href="https://getsongbpm.com" target="_blank" rel="noopener">GetSongBPM</a>. YouTube Music access via <a href="https://github.com/sigma67/ytmusicapi" target="_blank" rel="noopener">ytmusicapi</a> (unofficial). Runs only on your computer.</footer>
+  <footer class="credits">Tempo data from <a href="https://www.deezer.com" target="_blank" rel="noopener">Deezer</a> and <a href="https://getsongbpm.com" target="_blank" rel="noopener">GetSongBPM</a>. YouTube Music access via <a href="https://github.com/sigma67/ytmusicapi" target="_blank" rel="noopener">ytmusicapi</a> (unofficial). Runs only on your computer.</footer>
 
   <!-- ============================================================= DIALOGS -->
   <dialog id="dlg-settings">
     <form method="dialog" class="dlg">
       <h2>Settings</h2>
       <div class="dlg-row">
-        <div><b>GetSongBPM API key</b><p class="hint" id="set-key-state"></p></div>
+        <div><b>GetSongBPM API key (optional)</b><p class="hint" id="set-key-state"></p></div>
         <button type="button" class="btn btn-secondary" id="set-change-key">Change</button>
       </div>
       <div class="dlg-row">
