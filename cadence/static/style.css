@@ -219,7 +219,7 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; c
 .song-artist { font-size: 13px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .song-tag { font-size: 11px; color: var(--ink-3); border: 1px dashed var(--line); padding: 1px 6px; border-radius: 6px; }
 .song-dur { font-size: 13px; color: var(--ink-3); font-variant-numeric: tabular-nums; min-width: 36px; text-align: right; }
-.song.no-check { grid-template-columns: 0 64px minmax(0, 1fr) auto; }
+.song.no-check { grid-template-columns: 64px minmax(0, 1fr) auto; }  /* checkbox is display:none, so it takes no column */
 .song-meta { display: flex; align-items: center; gap: 10px; }
 .song.no-check input { display: none; }
 
@@ -274,7 +274,7 @@ dialog::backdrop { background: rgba(10, 10, 12, .45); }
 }
 @media (max-width: 480px) {
   .song { grid-template-columns: 22px 56px minmax(0, 1fr) auto; gap: 10px; padding: 9px 12px; }
-  .song.no-check { grid-template-columns: 0 56px minmax(0, 1fr) auto; }
+  .song.no-check { grid-template-columns: 56px minmax(0, 1fr) auto; }
   .song-tag { display: none; }
   .tab { padding: 10px 8px 12px; font-size: 14px; }
 }

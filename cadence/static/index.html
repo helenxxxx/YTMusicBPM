@@ -40,11 +40,11 @@
           <li>Open developer tools (<kbd>F12</kbd>, or <kbd>⌘</kbd><kbd>⌥</kbd><kbd>I</kbd> on a Mac) and choose the <b>Network</b> tab.</li>
           <li>Type <code>browse</code> in the filter box, then click <b>Library</b> on the YouTube Music page.</li>
           <li>Right-click the <code>browse?…</code> request that appears.
-            <span class="howto-sub"><b>Chrome:</b> Copy → Copy request headers. <b>Firefox:</b> Copy Value → Copy Request Headers.</span></li>
+            <span class="howto-sub"><b>Chrome / Edge:</b> Copy → <b>Copy as cURL (bash)</b>. <b>Firefox:</b> Copy Value → Copy as cURL (POSIX). Copied request headers work too.</span></li>
           <li>Paste it below.</li>
         </ol>
         <form id="form-ytm">
-          <textarea id="input-headers" rows="5" placeholder="accept: */*&#10;authorization: SAPISIDHASH …&#10;cookie: …" spellcheck="false" required></textarea>
+          <textarea id="input-headers" rows="5" placeholder="curl 'https://music.youtube.com/youtubei/v1/browse?…' \&#10;  -H 'authorization: SAPISIDHASH …' \&#10;  -b '…'" spellcheck="false" required></textarea>
           <div class="form-row">
             <span class="hint">Saved only on this computer, in <code>data/browser.json</code>.</span>
             <button class="btn btn-primary" type="submit" id="btn-connect">Connect</button>

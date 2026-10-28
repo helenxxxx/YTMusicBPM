@@ -249,6 +249,31 @@ def test_real_mode_needs_setup(tmp_path):
     assert r.status_code == 400 and "cookie" in r.get_json()["error"]
 
 
+CHROME_CURL = r"""curl 'https://music.youtube.com/youtubei/v1/browse?prettyPrint=false' \
+  -H 'accept: */*' \
+  -H 'authorization: SAPISIDHASH 123_abc' \
+  -H 'content-type: application/json' \
+  -b 'VISITOR_INFO1_LIVE=xyz; SAPISID=abc/def; __Secure-3PAPISID=abc/def' \
+  -H 'x-goog-authuser: 0' \
+  -H 'x-origin: https://music.youtube.com' \
+  --data-raw $'{"context":{"client":{"hl":"en"}},"browseId":"FEmusic_liked_videos"}'"""
+
+
+def test_headers_from_chrome_curl():
+    lines = ytm.headers_from_curl(CHROME_CURL).splitlines()
+    assert "authorization: SAPISIDHASH 123_abc" in lines
+    assert "cookie: VISITOR_INFO1_LIVE=xyz; SAPISID=abc/def; __Secure-3PAPISID=abc/def" in lines
+    assert "x-goog-authuser: 0" in lines
+    assert not any("browseId" in l for l in lines)  # the request body isn't a header
+    assert ytm.headers_from_curl("cookie: a=b") == "cookie: a=b"  # plain headers pass through
+
+
+def test_connect_accepts_curl(tmp_path):
+    ytm.save_browser_auth(tmp_path / "browser.json", CHROME_CURL)
+    saved = (tmp_path / "browser.json").read_text(encoding="utf-8").lower()
+    assert "sapisid=abc/def" in saved and "x-goog-authuser" in saved
+
+
 # ------------------------------------------------------------------- genres
 
 def test_lookup_returns_artist_genres():
