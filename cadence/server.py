@@ -248,7 +248,7 @@ def create_app(data_dir: Path, demo: bool = False) -> Flask:
         if privacy not in ("PRIVATE", "UNLISTED", "PUBLIC"):
             return err("Unknown privacy setting.")
         desc = (body.get("description") or "").strip() or "Made with Cadence Playlist."
-        desc += " BPM data: Deezer and getsongbpm.com"
+        desc += " BPM data: ReccoBeats, Deezer and getsongbpm.com"
         try:
             pid = ytm.create_playlist(state.yt(), name, desc, ids, privacy)
         except Exception as e:

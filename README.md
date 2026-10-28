@@ -2,14 +2,14 @@
 
 Build YouTube Music playlists that match your running cadence.
 
-YouTube Music doesn't know how fast songs are, so Cadence reads your liked songs (or any of your playlists), looks up each song's tempo on [Deezer](https://www.deezer.com) (and optionally the free [GetSongBPM](https://getsongbpm.com) database), and shows you the ones that match your steps per minute. Untick anything you don't fancy, then save it straight to YouTube Music as a playlist.
+YouTube Music doesn't know how fast songs are, so Cadence reads your liked songs (or any of your playlists), looks up each song's tempo on [ReccoBeats](https://reccobeats.com) and [Deezer](https://www.deezer.com) (and optionally the free [GetSongBPM](https://getsongbpm.com) database), and shows you the ones that match your steps per minute. Untick anything you don't fancy, then save it straight to YouTube Music as a playlist.
 
 - **Cadence slider** with wiggle room (± BPM), so you can see instantly what fits 165, 170 or 180 spm
 - **Half-time songs**: an 85 BPM song works for 170 spm (two steps per beat), which roughly doubles your options
 - **Genre filter**: pick one or more genres (rock, pop, house…) to narrow the matches. Each genre shows how many songs it has at your cadence
 - **Fix tempos by hand**: click any BPM to edit it, with ×2 / ÷2 buttons for songs the database has at double or half speed. Songs the database doesn't know go in the *Needs a BPM* tab
 - **Remembers everything**: each song is only looked up once, so later scans are quick
-- Runs **only on your computer**. Nothing is sent anywhere except YouTube Music, Deezer and (if you add a key) GetSongBPM
+- Runs **only on your computer**. Nothing is sent anywhere except YouTube Music, ReccoBeats, Deezer and (if you add a key) GetSongBPM
 
 ## Get started
 
@@ -27,7 +27,7 @@ python run.py
 Your browser opens at <http://127.0.0.1:5170>, and the app walks you through setup:
 
 1. **Connect YouTube Music.** There's no official YouTube Music API, so the app uses [ytmusicapi](https://github.com/sigma67/ytmusicapi), which borrows your signed-in browser session. The app shows step-by-step instructions for copying a request from music.youtube.com with **Copy as cURL (bash)** (plain copied request headers work too).
-2. **GetSongBPM API key (optional).** Tempos come from Deezer, which needs no account, but Deezer doesn't know every song. A free key from <https://getsongbpm.com/api> fills in more tempos and finer genres. You can skip this and add it later in ⚙️ Settings.
+2. **GetSongBPM API key (optional).** Tempos come from ReccoBeats and Deezer, which need no account, but they don't know every song. A free key from <https://getsongbpm.com/api> fills in more tempos and finer genres. You can skip this and add it later in ⚙️ Settings.
 
 Next time, just `cd` into the folder, activate the virtual environment and run `python run.py`.
 
@@ -43,7 +43,7 @@ Next time, just `cd` into the folder, activate the virtual environment and run `
 Tips:
 - Running at 170 spm? Try **± 3** to start. Your stride adjusts to a slightly off beat without you noticing.
 - Tempo databases sometimes list a song at double or half its real speed. If something sounds wrong, click its BPM and use ×2 / ÷2.
-- Genres are a rough guide: Deezer tags the **album** with broad genres (pop, rock, dance), and GetSongBPM lists the **artist's** main genres. Songs neither knows have no genre, so they drop out while a genre filter is on.
+- Genres are a rough guide: Deezer tags the **album** with broad genres (used for ReccoBeats tempos too) (pop, rock, dance), and GetSongBPM lists the **artist's** main genres. Songs neither knows have no genre, so they drop out while a genre filter is on.
 - Songs neither source knew are tried again once when a new source becomes available, such as when you add a GetSongBPM key.
 - Scanned songs before genres were added? Press **Scan again** once and it fetches their genres.
 - If scans start failing with sign-in errors, your YouTube Music session has expired. Open ⚙️ Settings → **Reconnect** and paste fresh headers.
@@ -92,9 +92,9 @@ tests/                  pytest tests (run: pip install -r requirements-dev.txt &
 |---|---|---|
 | [ytmusicapi](https://github.com/sigma67/ytmusicapi) | Reads your YouTube Music library and creates playlists | MIT |
 | [Flask](https://github.com/pallets/flask) | Runs the local web server | BSD-3-Clause |
-| [Requests](https://github.com/psf/requests) | Talks to the Deezer and GetSongBPM APIs | Apache-2.0 |
+| [Requests](https://github.com/psf/requests) | Talks to the ReccoBeats, Deezer and GetSongBPM APIs | Apache-2.0 |
 | [pytest](https://github.com/pytest-dev/pytest) | Runs the tests (development only) | MIT |
 
-Tempo data comes from [Deezer](https://developers.deezer.com) and [GetSongBPM](https://getsongbpm.com). ytmusicapi is unofficial and not affiliated with Google or YouTube.
+Tempo data comes from [ReccoBeats](https://reccobeats.com), [Deezer](https://developers.deezer.com) and [GetSongBPM](https://getsongbpm.com). ytmusicapi is unofficial and not affiliated with Google or YouTube.
 
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) has full credits, licence details and related projects.

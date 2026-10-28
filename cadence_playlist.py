@@ -6,7 +6,7 @@
     python cadence_playlist.py --cadence 170 --genre rock --genre punk
 
 Uses the same data/ folder as the web app, so connect YouTube Music in the web app once
-and this works too. Tempos come from Deezer; a GetSongBPM key (saved in the web app, or
+and this works too. Tempos come from ReccoBeats and Deezer; a GetSongBPM key (saved in the web app, or
 GETSONGBPM_API_KEY in the environment) is optional and fills in more songs.
 """
 
@@ -96,7 +96,7 @@ def main() -> None:
 
     name = args.name or f"Running {args.cadence:g} spm" + (f" · {' & '.join(g.title() for g in args.genre)}" if args.genre else "")
     desc = (f"Songs at {lo:g}-{hi:g} BPM" + (" (plus half-time)" if half else "")
-            + (f". Genres: {', '.join(args.genre)}" if args.genre else "") + ". BPM data: Deezer and getsongbpm.com")
+            + (f". Genres: {', '.join(args.genre)}" if args.genre else "") + ". BPM data: ReccoBeats, Deezer and getsongbpm.com")
     pid = ytm.create_playlist(yt, name, desc, [t.video_id for _, t in matches])
     print(f"\nCreated '{name}' with {len(matches)} songs: https://music.youtube.com/playlist?list={pid}")
 
