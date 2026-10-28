@@ -130,6 +130,7 @@
           <button class="tab active" data-tab="matches" role="tab">Matches <span class="count" id="count-matches">0</span></button>
           <button class="tab" data-tab="missing" role="tab">Needs a BPM <span class="count" id="count-missing">0</span></button>
           <button class="tab" data-tab="all" role="tab">All songs <span class="count" id="count-all">0</span></button>
+          <button class="tab" data-tab="discover" role="tab">Discover <span class="count" id="count-discover">0</span></button>
         </div>
         <input type="search" id="in-search" placeholder="Filter songs" aria-label="Filter songs">
       </div>
@@ -145,6 +146,11 @@
           </select>
           <button class="link-btn" id="btn-reshuffle" hidden title="Shuffle again">↻</button>
         </span>
+      </div>
+
+      <div class="list-tools" id="discover-tools" hidden>
+        <span id="discover-summary"></span>
+        <span class="list-tools-right"><button class="link-btn" id="btn-discover-more">Find more</button></span>
       </div>
 
       <ul class="song-list" id="song-list"></ul>

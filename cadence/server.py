@@ -7,6 +7,7 @@ Everything it saves lives in the data/ folder next to the project.
 from __future__ import annotations
 
 import json
+import random
 import threading
 import time
 from pathlib import Path
@@ -30,6 +31,8 @@ class AppState:
         self.cache = BpmCache(self.data_dir / ("demo_bpm_cache.json" if demo else "bpm_cache.json"))
         self.config = self._read_json(self.config_file) or {}
         self.library = self._read_json(self.library_file) or {}
+        self.discover_file = self.data_dir / ("demo_discover.json" if demo else "discover.json")
+        self.discover = self._read_json(self.discover_file) or {}
         self._yt = None
         self._fake_yt = None
         self.job = {"state": "idle", "done": 0, "total": 0, "current": "", "error": ""}
@@ -85,14 +88,25 @@ class AppState:
         core.apply_cache(out, self.cache)
         return out
 
+    def discovered(self) -> list[Track]:
+        out = [Track(**t) for t in self.discover.get("tracks", [])]
+        core.apply_cache(out, self.cache)
+        return out
+
     # ------------------------------------------------------------------- scan
-    def start_scan(self, source: str, source_title: str) -> None:
+    def _start_job(self, target, args, current: str) -> None:
         with self._lock:
             if self.job["state"] == "running":
                 raise RuntimeError("A scan is already running.")
             self._stop.clear()
-            self.job = {"state": "running", "done": 0, "total": 0, "current": "Reading your songs…", "error": ""}
-        threading.Thread(target=self._scan, args=(source, source_title), daemon=True).start()
+            self.job = {"state": "running", "done": 0, "total": 0, "current": current, "error": ""}
+        threading.Thread(target=target, args=args, daemon=True).start()
+
+    def start_scan(self, source: str, source_title: str) -> None:
+        self._start_job(self._scan, (source, source_title), "Reading your songs…")
+
+    def start_discover(self, cadence: float, tolerance: float, half: bool) -> None:
+        self._start_job(self._discover, (cadence, tolerance, half), "Asking YouTube Music for similar songs…")
 
     def stop_scan(self) -> None:
         self._stop.set()
@@ -121,6 +135,55 @@ class AppState:
         except BadApiKey:
             self.job.update(state="error", error="GetSongBPM rejected your API key. Check it in Settings.")
         except ytm.NotConnected as e:
+            self.job.update(state="error", error=str(e))
+        except Exception as e:  # surface anything else in the UI rather than dying silently
+            self.job.update(state="error", error=f"{type(e).__name__}: {e}")
+
+    # --------------------------------------------------------------- discover
+    DISCOVER_SEEDS = 8       # songs of yours to start YouTube Music radios from
+    DISCOVER_PER_SEED = 25   # suggestions taken from each radio
+
+    def _discover(self, cadence: float, tolerance: float, half: bool) -> None:
+        """Find songs you don't have yet, from YouTube Music radios for your songs at this cadence.
+
+        Seeding from songs that already fit the cadence keeps both your taste and the tempo close.
+        New suggestions are added to the ones found before, so "Find more" keeps growing the list.
+        """
+        try:
+            library = self.tracks()
+            fits = [t for t in library if t.bpm and core.match_kind(t.bpm, cadence, tolerance, half)]
+            pool = fits or [t for t in library if t.bpm] or library
+            if not pool:
+                raise RuntimeError("Scan your songs first, so there's something to find similar songs to.")
+            seeds = random.sample(pool, min(self.DISCOVER_SEEDS, len(pool)))
+
+            known = {t.video_id for t in library} | {t["video_id"] for t in self.discover.get("tracks", [])}
+            found: list[Track] = []
+            for i, seed in enumerate(seeds, 1):
+                if self._stop.is_set():
+                    break
+                self.job.update(current=f"Finding songs like {seed.label} ({i} of {len(seeds)})")
+                for t in ytm.fetch_radio(self.yt(), seed.video_id, self.DISCOVER_PER_SEED):
+                    if t.video_id not in known:
+                        known.add(t.video_id)
+                        found.append(t)
+
+            def progress(i, n, t):
+                self.job.update(done=i, total=n, current=t.label)
+
+            core.enrich(
+                found, self.cache, self.lookup(), progress=progress,
+                should_stop=self._stop.is_set, pause=0.02 if self.demo else core.REQUEST_PAUSE,
+            )
+            self.discover = {
+                "found_at": int(time.time()),
+                "tracks": self.discover.get("tracks", []) + [t.to_dict() for t in found],
+            }
+            self._write_json(self.discover_file, self.discover)
+            self.job.update(state="stopped" if self._stop.is_set() else "done", current="", found=len(found))
+        except BadApiKey:
+            self.job.update(state="error", error="GetSongBPM rejected your API key. Check it in Settings.")
+        except (ytm.NotConnected, RuntimeError) as e:
             self.job.update(state="error", error=str(e))
         except Exception as e:  # surface anything else in the UI rather than dying silently
             self.job.update(state="error", error=f"{type(e).__name__}: {e}")
@@ -217,7 +280,24 @@ def create_app(data_dir: Path, demo: bool = False) -> Flask:
 
     @app.get("/api/tracks")
     def tracks():
-        return jsonify(tracks=[t.to_dict() for t in state.tracks()])
+        return jsonify(tracks=[t.to_dict() for t in state.tracks()],
+                       discover=[t.to_dict() for t in state.discovered()])
+
+    @app.post("/api/discover")
+    def discover():
+        body = request.get_json(force=True) or {}
+        if not state.ytm_connected():
+            return err("Connect YouTube Music first.", 409)
+        try:
+            cadence = float(body.get("cadence", 170))
+            tolerance = float(body.get("tolerance", 3))
+        except (TypeError, ValueError):
+            return err("Cadence must be a number.")
+        try:
+            state.start_discover(cadence, tolerance, bool(body.get("half", True)))
+        except RuntimeError as e:
+            return err(str(e), 409)
+        return jsonify(ok=True)
 
     @app.post("/api/tracks/<video_id>/bpm")
     def set_bpm(video_id):

@@ -19,7 +19,7 @@ _WORDS = [
 ]
 
 
-def _library(n: int = 140, seed: int = 7):
+def _library(n: int = 140, seed: int = 7, prefix: str = "demo"):
     rng = random.Random(seed)
     songs = []
     for i in range(n):
@@ -36,7 +36,7 @@ def _library(n: int = 140, seed: int = 7):
             bpm = rng.randint(95, 150)
         songs.append(
             {
-                "videoId": f"demo{i:04d}",
+                "videoId": f"{prefix}{i:04d}",
                 "title": title,
                 "artists": [{"name": artist}],
                 "duration_seconds": rng.randint(150, 290),
@@ -47,11 +47,21 @@ def _library(n: int = 140, seed: int = 7):
 
 
 LIBRARY = _library()
+ELSEWHERE = _library(120, seed=11, prefix="new")  # songs not in your library, for Discover
 
 
 class FakeYTMusic:
     def __init__(self):
         self.created: list[dict] = []
+
+    def get_watch_playlist(self, videoId=None, radio=False, limit=25, **_):
+        rng = random.Random(videoId)
+        picks = rng.sample(LIBRARY, 5) + rng.sample(ELSEWHERE, limit - 5)  # radios mix in songs you know
+        return {"tracks": [
+            {"videoId": s["videoId"], "title": s["title"], "artists": s["artists"],
+             "length": f"{s['duration_seconds'] // 60}:{s['duration_seconds'] % 60:02d}"}
+            for s in picks
+        ]}
 
     def get_liked_songs(self, limit=None):
         return {"tracks": LIBRARY[:limit] if limit else LIBRARY}
@@ -86,7 +96,7 @@ _GENRES = {
 
 def fake_lookup(title: str, artist: str):
     # The real lookup receives a cleaned-up artist ("Marlowe & Finch" -> "Marlowe"), so match on prefix.
-    for s in LIBRARY:
+    for s in LIBRARY + ELSEWHERE:
         name = s["artists"][0]["name"]
         if s["title"] == title and name.startswith(artist):
             return (s["_bpm"], _GENRES.get(name, [])) if s["_bpm"] else None

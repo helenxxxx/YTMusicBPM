@@ -56,6 +56,8 @@ function showError(sel, msg) {
 const state = {
   status: null,
   tracks: [],
+  discover: [],        // songs you don't have yet, from YouTube Music radios (Discover tab)
+  picked: new Set(),   // Discover songs ticked into the playlist (opt-in, unlike your own songs)
   prefs: { cadence: 170, tolerance: 3, half: true, order: "bpm", privacy: "PRIVATE", genres: [] },
   showAllGenres: false,
   excluded: new Set(),
@@ -80,9 +82,9 @@ function genreOk(t) {
 
 // kind: "full" | "half" | null  (tempo match, ignoring genre)
 // match: tempo match AND genre filter
-function classify() {
+function classify(list = state.tracks) {
   const { cadence, tolerance, half } = state.prefs;
-  return state.tracks.map((t, i) => {
+  return list.map((t, i) => {
     const kind = matchKind(t.bpm, cadence, tolerance, half);
     return { ...t, idx: i, kind, match: !!kind && genreOk(t) };
   });
@@ -110,6 +112,18 @@ function ordered(list) {
   // by tempo: half-time songs sorted by the step rate they give you (bpm × 2)
   const eff = (t) => (t.kind === "half" ? t.bpm * 2 : t.bpm ?? 0);
   return copy.sort((a, b) => eff(a) - eff(b) || a.idx - b.idx);
+}
+
+// Everything going into the playlist: your matching songs you haven't unticked, then the
+// Discover songs you've ticked (only while they still fit the cadence and genre).
+function playlistSongs() {
+  const mine = ordered(classify().filter((t) => t.match)).filter((t) => !state.excluded.has(t.video_id));
+  const found = ordered(classify(state.discover).filter((t) => t.match && state.picked.has(t.video_id)));
+  return mine.concat(found);
+}
+
+function findTrack(videoId) {
+  return state.tracks.find((x) => x.video_id === videoId) || state.discover.find((x) => x.video_id === videoId);
 }
 
 // ------------------------------------------------------------------ prefs
@@ -168,23 +182,31 @@ function render() {
   const matches = all.filter((t) => t.match);
   const missing = all.filter((t) => t.bpm == null);
   const allShown = all.filter(genreOk);
+  const found = classify(state.discover).filter((t) => t.match);
   renderGenres(all);
 
   $("#count-matches").textContent = matches.length;
   $("#count-missing").textContent = missing.length;
   $("#count-all").textContent = allShown.length;
+  $("#count-discover").textContent = found.length;
   $$(".tab").forEach((b) => b.classList.toggle("active", b.dataset.tab === state.tab));
 
-  const base = state.tab === "matches" ? matches : state.tab === "missing" ? missing : allShown;
+  const base = { matches, missing, discover: found }[state.tab] || allShown;
   const q = state.search.trim().toLowerCase();
   const shown = ordered(base).filter((t) => !q || `${t.title} ${t.artist}`.toLowerCase().includes(q));
 
-  // selection & summary (always about the matches, whatever tab you're on)
+  // selection & summary (always about what goes in the playlist, whatever tab you're on)
   const selected = ordered(matches).filter((t) => !state.excluded.has(t.video_id));
-  const secs = selected.reduce((s, t) => s + (t.duration || 0), 0);
-  $("#sum-songs").textContent = `${selected.length} song${selected.length === 1 ? "" : "s"}`;
+  const inPlaylist = playlistSongs();
+  const secs = inPlaylist.reduce((s, t) => s + (t.duration || 0), 0);
+  $("#sum-songs").textContent = `${inPlaylist.length} song${inPlaylist.length === 1 ? "" : "s"}`;
   $("#sum-time").textContent = secs ? fmtDuration(secs) : "—";
-  $("#btn-create").disabled = selected.length === 0;
+  $("#btn-create").disabled = inPlaylist.length === 0;
+  const picked = inPlaylist.length - selected.length;
+  $("#discover-summary").textContent = !state.discover.length
+    ? "Songs you don't have yet, from YouTube Music radios for your songs at this cadence."
+    : `${found.length} new songs at ${state.prefs.cadence} spm${picked ? ` · ${picked} ticked into the playlist` : ". Tick any you'd like in the playlist"}.`;
+  $("#discover-tools").hidden = state.tab !== "discover";
   const ca = $("#check-all");
   ca.checked = selected.length === matches.length && matches.length > 0;
   ca.indeterminate = selected.length > 0 && selected.length < matches.length;
@@ -203,7 +225,15 @@ function render() {
   empty.replaceChildren();
   let show = shown.length === 0;
   if (show) {
-    if (state.tracks.length === 0) {
+    if (state.tab === "discover" && !q) {
+      empty.append(state.tracks.length === 0
+        ? emptyBlock("Scan your songs first", "Discover finds songs similar to yours, so it needs a scan to start from.")
+        : state.discover.length
+          ? emptyBlock(`No new songs at ${state.prefs.cadence} spm yet`, "Find more, or try more wiggle room.", ["Find more", startDiscover])
+          : emptyBlock("Find songs you don't have yet",
+              `Cadence asks YouTube Music for songs like yours at ${state.prefs.cadence} spm, then looks up their tempos. It takes a minute or two.`,
+              ["Find new songs", startDiscover]));
+    } else if (state.tracks.length === 0) {
       empty.append(emptyBlock("No songs scanned yet",
         "Pick where your songs come from on the left, then scan. Cadence looks up each song's tempo once and remembers it.",
         ["Scan liked songs", () => $("#btn-scan").click()]));
@@ -243,14 +273,16 @@ function emptyBlock(title, text, action) {
 function rowFor(t) {
   const li = document.createElement("li");
   const inMatches = state.tab === "matches";
-  li.className = "song" + (inMatches ? "" : " no-check") + (inMatches && state.excluded.has(t.video_id) ? " excluded" : "");
+  const inDiscover = state.tab === "discover";
+  li.className = "song" + (inMatches || inDiscover ? "" : " no-check") + (inMatches && state.excluded.has(t.video_id) ? " excluded" : "");
 
   const cb = document.createElement("input");
   cb.type = "checkbox";
-  cb.checked = !state.excluded.has(t.video_id);
+  cb.checked = inDiscover ? state.picked.has(t.video_id) : !state.excluded.has(t.video_id);
   cb.setAttribute("aria-label", `Include ${t.title}`);
   cb.addEventListener("change", () => {
-    if (cb.checked) state.excluded.delete(t.video_id); else state.excluded.add(t.video_id);
+    const set = inDiscover ? state.picked : state.excluded;
+    if (cb.checked === inDiscover) set.add(t.video_id); else set.delete(t.video_id);
     render();
   });
 
@@ -371,12 +403,12 @@ async function saveBpm(value) {
   const nextId = missing[missing.indexOf(t.video_id) + 1];
   try {
     const res = await api(`/api/tracks/${encodeURIComponent(t.video_id)}/bpm`, { bpm: value });
-    const tr = state.tracks.find((x) => x.video_id === t.video_id);
+    const tr = findTrack(t.video_id);
     if (tr) { tr.bpm = res.bpm ?? null; tr.bpm_source = "manual"; }
     closePopover();
     render();
     const nextPill = nextId && document.querySelector(`.song-list .song[data-id="${CSS.escape(nextId)}"] .bpm`);
-    const next = nextPill && state.tracks.find((x) => x.video_id === nextId);
+    const next = nextPill && findTrack(nextId);
     if (next) {
       nextPill.scrollIntoView({ block: "nearest" });
       openBpmPopover(next, nextPill);
@@ -419,6 +451,17 @@ async function startScan() {
   poll();
 }
 
+async function startDiscover() {
+  showError("#err-scan", "");
+  const { cadence, tolerance, half } = state.prefs;
+  try {
+    await api("/api/discover", { cadence, tolerance, half });
+  } catch (e) { toast(e.message, { error: true }); return; }
+  setTab("discover");
+  setScanning(true);
+  poll();
+}
+
 function setScanning(on) {
   $("#scan-progress").hidden = !on;
   $("#btn-scan").disabled = on;
@@ -450,6 +493,7 @@ async function poll() {
     await refreshStatus();
     await loadTracks();
     if (job.state === "stopped") toast("Scan stopped. Tempos found so far are saved, so the next scan picks up where it left off.");
+    else if (job.found != null) toast(`Found ${job.found} new song${job.found === 1 ? "" : "s"} you don't have yet. The ones at your cadence are in Discover.`);
   }
 }
 
@@ -475,8 +519,9 @@ async function refreshStatus() {
 }
 
 async function loadTracks() {
-  const { tracks } = await api("/api/tracks");
+  const { tracks, discover } = await api("/api/tracks");
   state.tracks = tracks;
+  state.discover = discover || [];
   updateScanInfo();
   render();
 }
@@ -551,12 +596,13 @@ function wire() {
 
   // scan
   $("#btn-scan").addEventListener("click", startScan);
+  $("#btn-discover-more").addEventListener("click", startDiscover);
   $("#btn-stop").addEventListener("click", () => api("/api/scan/stop", {}).catch(() => {}));
 
   // create playlist
   $("#btn-create").addEventListener("click", async () => {
     const btn = $("#btn-create");
-    const matches = ordered(classify().filter((t) => t.match)).filter((t) => !state.excluded.has(t.video_id));
+    const matches = playlistSongs();
     const name = $("#in-name").value.trim() || defaultName();
     const p = state.prefs;
     btn.disabled = true;
