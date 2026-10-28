@@ -86,6 +86,68 @@ def test_lookup_bad_key():
         core.lookup_bpm(s, "bad", "a", "b")
 
 
+def deezer_session(responses):
+    """Fake session answering Deezer paths (e.g. 'search', 'track/1') from a dict."""
+    s = mock.Mock()
+    s.get.side_effect = lambda url, params=None, timeout=None: Resp(200, responses[url.removeprefix(core.DEEZER_URL)])
+    return s
+
+
+DEEZER_SEARCH = {"data": [
+    {"id": 1, "title": "Eye of the Tiger (Live)", "title_short": "Eye of the Tiger", "artist": {"name": "Survivor"}},
+    {"id": 2, "title": "Eye of the Tiger", "title_short": "Eye of the Tiger", "artist": {"name": "Survivor"}},
+    {"id": 3, "title": "Eye of the Tiger", "title_short": "Eye of the Tiger", "artist": {"name": "Cover Band"}},
+]}
+
+
+def test_deezer_skips_releases_without_bpm():
+    s = deezer_session({
+        "search": DEEZER_SEARCH,
+        "track/1": {"bpm": 0, "album": {"id": 10}},
+        "track/2": {"bpm": 108.8, "album": {"id": 20}},
+        "album/20": {"genres": {"data": [{"name": "Rock"}, {"name": "Pop"}]}},
+    })
+    assert core.lookup_deezer(s, "Eye of the Tiger", "Survivor") == (109, ["rock", "pop"])
+
+
+def test_deezer_ignores_other_artists_and_unknown_tempo():
+    s = deezer_session({
+        "search": DEEZER_SEARCH,
+        "track/1": {"bpm": 0}, "track/2": {"bpm": 0},
+    })
+    assert core.lookup_deezer(s, "Eye of the Tiger", "Survivor") is None
+    assert core.lookup_deezer(deezer_session({"search": {"data": []}}), "Nope", "Nobody") is None
+
+
+def test_make_lookup_falls_back_to_deezer(monkeypatch):
+    monkeypatch.setattr(core, "lookup_song", lambda s, key, title, artist: None)
+    monkeypatch.setattr(core, "lookup_deezer", lambda s, title, artist, albums=None: (120, ["pop"]))
+    assert core.make_lookup("key")("T", "A") == (120, ["pop"], "deezer")
+    monkeypatch.setattr(core, "lookup_song", lambda s, key, title, artist: (150, ["rock"]))
+    assert core.make_lookup("key")("T", "A") == (150, ["rock"], "getsongbpm")
+    assert core.make_lookup("")("T", "A") == (120, ["pop"], "deezer")  # no key: Deezer only
+    assert core.make_lookup("").sources == ("deezer",)
+
+
+def test_songs_nobody_knew_are_retried_once_with_a_new_source(tmp_path):
+    cache = BpmCache(tmp_path / "c.json")
+    cache.set("a", None, "", genres=[])        # GetSongBPM didn't know it (before Deezer existed)
+    tracks = [Track("a", "A", "X")]
+    calls = []
+
+    def lookup(title, artist):
+        calls.append(title)
+        return None
+    lookup.sources = ("deezer",)
+
+    core.enrich(tracks, cache, lookup, pause=0)
+    core.enrich(tracks, cache, lookup, pause=0)
+    assert calls == ["A"]  # asked Deezer once, then remembered it doesn't know it either
+    lookup.sources = ("getsongbpm", "deezer")
+    core.enrich(tracks, cache, lookup, pause=0)
+    assert calls == ["A"]  # GetSongBPM had already been tried
+
+
 # -------------------------------------------------------------------- cache
 
 def test_enrich_uses_cache(tmp_path):
@@ -181,7 +243,7 @@ def test_real_mode_needs_setup(tmp_path):
     c = create_app(tmp_path, demo=False).test_client()
     st = c.get("/api/status").get_json()
     assert not st["ytm_connected"] and not st["api_key_set"]
-    assert c.post("/api/scan", json={}).status_code == 400
+    assert c.post("/api/scan", json={}).status_code == 409  # no GetSongBPM key needed, but YouTube Music is
     assert c.get("/api/sources").status_code == 409
     r = c.post("/api/connect", json={"headers": "accept: */*"})
     assert r.status_code == 400 and "cookie" in r.get_json()["error"]

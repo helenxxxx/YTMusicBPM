@@ -78,7 +78,7 @@ class AppState:
         if self.demo:
             from .demo import fake_lookup
             return fake_lookup
-        return core.make_getsongbpm_lookup(self.api_key)
+        return core.make_lookup(self.api_key)
 
     def tracks(self) -> list[Track]:
         out = [Track(**t) for t in self.library.get("tracks", [])]
@@ -198,8 +198,8 @@ def create_app(data_dir: Path, demo: bool = False) -> Flask:
     @app.post("/api/scan")
     def scan():
         body = request.get_json(force=True) or {}
-        if not (state.demo or state.api_key):
-            return err("Add your GetSongBPM API key first.")
+        if not state.ytm_connected():
+            return err("Connect YouTube Music first.", 409)
         try:
             state.start_scan(body.get("source", "liked"), body.get("source_title", "Liked songs"))
         except RuntimeError as e:
@@ -248,7 +248,7 @@ def create_app(data_dir: Path, demo: bool = False) -> Flask:
         if privacy not in ("PRIVATE", "UNLISTED", "PUBLIC"):
             return err("Unknown privacy setting.")
         desc = (body.get("description") or "").strip() or "Made with Cadence Playlist."
-        desc += " BPM data: getsongbpm.com"
+        desc += " BPM data: Deezer and getsongbpm.com"
         try:
             pid = ytm.create_playlist(state.yt(), name, desc, ids, privacy)
         except Exception as e:

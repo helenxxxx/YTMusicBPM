@@ -432,9 +432,9 @@ async function refreshStatus() {
   const s = state.status;
   $("#demo-badge").hidden = !s.demo;
   $("#chip-ytm").className = "chip " + (s.ytm_connected ? "on" : "off");
-  $("#chip-key").className = "chip " + (s.api_key_set ? "on" : "off");
+  $("#chip-key").className = "chip on";  // Deezer needs no key, so tempo data is always available
   $("#chip-ytm").title = s.ytm_connected ? "YouTube Music connected" : "YouTube Music not connected";
-  $("#chip-key").title = s.api_key_set ? "GetSongBPM key saved" : "No GetSongBPM key";
+  $("#chip-key").title = s.api_key_set ? "Tempos from GetSongBPM and Deezer" : "Tempos from Deezer (add a GetSongBPM key in Settings for more)";
   return s;
 }
 
@@ -469,7 +469,7 @@ function renderSetup() {
   const ytmDone = s.ytm_connected && !state.forceSetup.ytm;
   $("#step-key").classList.toggle("done", keyDone);
   $("#step-ytm").classList.toggle("done", ytmDone);
-  $("#btn-setup-done").disabled = !(s.api_key_set && s.ytm_connected);
+  $("#btn-setup-done").disabled = !s.ytm_connected;  // the GetSongBPM key is optional
 }
 
 function showView(name) {
@@ -596,7 +596,7 @@ function wire() {
   const dlg = $("#dlg-settings");
   $("#btn-settings").addEventListener("click", () => {
     const s = state.status;
-    $("#set-key-state").textContent = s.demo ? "Not needed in demo mode" : s.api_key_set ? "Saved" : "Not set";
+    $("#set-key-state").textContent = s.demo ? "Not needed in demo mode" : s.api_key_set ? "Saved" : "Not set. Tempos come from Deezer only";
     $("#set-ytm-state").textContent = s.demo ? "Using the demo library" : s.ytm_connected ? "Connected" : "Not connected";
     dlg.showModal();
   });
@@ -615,7 +615,7 @@ function wire() {
     const s = await refreshStatus();
     if (s.prefs && typeof s.prefs === "object") Object.assign(state.prefs, s.prefs);
     if (!Array.isArray(state.prefs.genres)) state.prefs.genres = [];
-    if (s.api_key_set && s.ytm_connected) await enterMain();
+    if (s.ytm_connected) await enterMain();
     else { renderSetup(); showView("setup"); }
   } catch (e) {
     toast(`Couldn't reach the Cadence server. Is run.py still running? (${e.message})`, { error: true, ms: 60000 });
