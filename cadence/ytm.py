@@ -5,6 +5,8 @@ ytmusicapi: https://github.com/sigma67/ytmusicapi (MIT licence)
 
 from __future__ import annotations
 
+import re
+import shlex
 from pathlib import Path
 
 from .core import Track
@@ -14,17 +16,44 @@ class NotConnected(Exception):
     pass
 
 
+def headers_from_curl(text: str) -> str:
+    """Pull the headers out of a 'Copy as cURL (bash)' command, as 'name: value' lines.
+
+    Newer Chrome versions have no 'Copy request headers' option, but every version has
+    'Copy as cURL'. Chrome puts the cookies in -b rather than a cookie header.
+    Text that isn't a cURL command is returned unchanged.
+    """
+    if not text.lstrip().lower().startswith("curl "):
+        return text
+    text = re.sub(r"\\\r?\n", " ", text)            # bash line continuations
+    text = re.sub(r"(^|\s)\$'", r"\1'", text)       # $'...' quoting -> '...'
+    try:
+        args = shlex.split(text)
+    except ValueError as e:
+        raise ValueError(
+            "Couldn't read that cURL command. Use 'Copy as cURL (bash)', not the cmd version."
+        ) from e
+    lines = []
+    for flag, value in zip(args, args[1:]):
+        if flag in ("-H", "--header") and ":" in value:
+            lines.append(value)
+        elif flag in ("-b", "--cookie"):
+            lines.append(f"cookie: {value}")
+    return "\n".join(lines)
+
+
 def save_browser_auth(auth_file: Path, headers_raw: str) -> None:
-    """Turn request headers copied from music.youtube.com into an auth file.
+    """Turn request headers (or a cURL command) copied from music.youtube.com into an auth file.
 
     Raises ValueError with a readable message if the headers look wrong.
     """
     from ytmusicapi import setup
 
+    headers_raw = headers_from_curl(headers_raw)
     if "cookie" not in headers_raw.lower():
         raise ValueError(
-            "Those headers don't include a cookie line. Copy the request headers from a "
-            "'browse' request on music.youtube.com while you're signed in."
+            "Those headers don't include a cookie. Copy the 'browse' request on "
+            "music.youtube.com as cURL (bash) while you're signed in."
         )
     auth_file.parent.mkdir(parents=True, exist_ok=True)
     try:

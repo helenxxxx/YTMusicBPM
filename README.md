@@ -26,7 +26,7 @@ python run.py
 
 Your browser opens at <http://127.0.0.1:5170>, and the app walks you through setup:
 
-1. **Connect YouTube Music.** There's no official YouTube Music API, so the app uses [ytmusicapi](https://github.com/sigma67/ytmusicapi), which borrows your signed-in browser session. The app shows step-by-step instructions for copying the request headers from music.youtube.com.
+1. **Connect YouTube Music.** There's no official YouTube Music API, so the app uses [ytmusicapi](https://github.com/sigma67/ytmusicapi), which borrows your signed-in browser session. The app shows step-by-step instructions for copying a request from music.youtube.com with **Copy as cURL (bash)** (plain copied request headers work too).
 2. **GetSongBPM API key (optional).** Tempos come from Deezer, which needs no account, but Deezer doesn't know every song. A free key from <https://getsongbpm.com/api> fills in more tempos and finer genres. You can skip this and add it later in ⚙️ Settings.
 
 Next time, just `cd` into the folder, activate the virtual environment and run `python run.py`.
