@@ -345,7 +345,7 @@ function openBpmPopover(t, anchor) {
   $("#pop-title").textContent = `${t.title} · ${t.artist}`;
   $("#pop-input").value = t.bpm ?? "";
   $("#pop-lookup").href = "https://www.google.com/search?q=" + encodeURIComponent(`${t.artist} ${t.title} bpm`);
-  $("#pop-songbpm-query").value = `${t.artist.split(",")[0]} ${t.title}`;
+  $("#pop-songbpm").href = "https://www.google.com/search?q=" + encodeURIComponent(`site:songbpm.com ${t.artist.split(",")[0]} ${t.title}`);
   $("#pop-clear").hidden = t.bpm == null;
   resetTap();
   pop.hidden = false;

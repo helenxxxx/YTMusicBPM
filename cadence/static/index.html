@@ -195,11 +195,8 @@
     </div>
     <p class="pop-hint" id="pop-tap-hint" hidden></p>
     <div class="pop-links">
-      <!-- songbpm.com only searches by POST, so this is a tiny form that opens the results in a new tab -->
-      <form id="pop-songbpm" action="https://songbpm.com/searches" method="POST" target="_blank">
-        <input type="hidden" name="query" id="pop-songbpm-query">
-        <button type="submit" class="link-btn pop-link" title="Search songbpm.com for this song">songbpm.com ↗</button>
-      </form>
+      <!-- songbpm.com's own search refuses requests from other sites, so this searches it through Google -->
+      <a id="pop-songbpm" target="_blank" rel="noopener" class="pop-link" title="Find this song on songbpm.com">songbpm.com ↗</a>
       <a id="pop-lookup" target="_blank" rel="noopener" class="pop-link">Web search ↗</a>
     </div>
     <div class="pop-actions">
