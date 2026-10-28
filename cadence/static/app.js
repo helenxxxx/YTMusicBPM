@@ -432,9 +432,9 @@ async function refreshStatus() {
   const s = state.status;
   $("#demo-badge").hidden = !s.demo;
   $("#chip-ytm").className = "chip " + (s.ytm_connected ? "on" : "off");
-  $("#chip-key").className = "chip on";  // Deezer needs no key, so tempo data is always available
+  $("#chip-key").className = "chip on";  // ReccoBeats and Deezer need no key, so tempo data is always available
   $("#chip-ytm").title = s.ytm_connected ? "YouTube Music connected" : "YouTube Music not connected";
-  $("#chip-key").title = s.api_key_set ? "Tempos from GetSongBPM and Deezer" : "Tempos from Deezer (add a GetSongBPM key in Settings for more)";
+  $("#chip-key").title = s.api_key_set ? "Tempos from GetSongBPM, ReccoBeats and Deezer" : "Tempos from ReccoBeats and Deezer (add a GetSongBPM key in Settings for more)";
   return s;
 }
 
@@ -596,7 +596,7 @@ function wire() {
   const dlg = $("#dlg-settings");
   $("#btn-settings").addEventListener("click", () => {
     const s = state.status;
-    $("#set-key-state").textContent = s.demo ? "Not needed in demo mode" : s.api_key_set ? "Saved" : "Not set. Tempos come from Deezer only";
+    $("#set-key-state").textContent = s.demo ? "Not needed in demo mode" : s.api_key_set ? "Saved" : "Not set. Tempos come from ReccoBeats and Deezer";
     $("#set-ytm-state").textContent = s.demo ? "Using the demo library" : s.ytm_connected ? "Connected" : "Not connected";
     dlg.showModal();
   });

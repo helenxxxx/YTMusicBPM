@@ -119,14 +119,38 @@ def test_deezer_ignores_other_artists_and_unknown_tempo():
     assert core.lookup_deezer(deezer_session({"search": {"data": []}}), "Nope", "Nobody") is None
 
 
-def test_make_lookup_falls_back_to_deezer(monkeypatch):
+def test_make_lookup_order(monkeypatch):
+    monkeypatch.setattr(core, "deezer_candidates", lambda s, title, artist: [])
     monkeypatch.setattr(core, "lookup_song", lambda s, key, title, artist: None)
-    monkeypatch.setattr(core, "lookup_deezer", lambda s, title, artist, albums=None: (120, ["pop"]))
+    monkeypatch.setattr(core, "lookup_reccobeats", lambda s, candidates, albums=None: None)
+    monkeypatch.setattr(core, "lookup_deezer", lambda s, title, artist, albums=None, candidates=None: (120, ["pop"]))
     assert core.make_lookup("key")("T", "A") == (120, ["pop"], "deezer")
+    monkeypatch.setattr(core, "lookup_reccobeats", lambda s, candidates, albums=None: (130, ["rock"]))
+    assert core.make_lookup("key")("T", "A") == (130, ["rock"], "reccobeats")
     monkeypatch.setattr(core, "lookup_song", lambda s, key, title, artist: (150, ["rock"]))
     assert core.make_lookup("key")("T", "A") == (150, ["rock"], "getsongbpm")
-    assert core.make_lookup("")("T", "A") == (120, ["pop"], "deezer")  # no key: Deezer only
-    assert core.make_lookup("").sources == ("deezer",)
+    assert core.make_lookup("")("T", "A") == (130, ["rock"], "reccobeats")  # no key: GetSongBPM skipped
+    assert core.make_lookup("").sources == ("reccobeats", "deezer")
+
+
+def test_reccobeats_by_isrc():
+    s = mock.Mock()
+
+    def get(url, params=None, timeout=None):
+        if url.startswith(core.RECCOBEATS_URL):
+            assert params == {"ids": "A1,B2"}
+            return Resp(200, {"content": [{"isrc": "B2", "tempo": 130.027}, {"isrc": "B2", "tempo": 65.0}]})
+        return Resp(200, {"genres": {"data": [{"name": "Rock"}]}})  # Deezer album
+    s.get.side_effect = get
+    candidates = [{"isrc": "A1", "album": {"id": 1}}, {"isrc": "B2", "album": {"id": 2}}, {"album": {"id": 3}}]
+    assert core.lookup_reccobeats(s, candidates) == (130, ["rock"])
+    assert core.lookup_reccobeats(s, [{"album": {"id": 3}}]) is None  # no ISRC: nothing to ask
+
+
+def test_reccobeats_down_falls_through():
+    s = mock.Mock()
+    s.get.side_effect = core.requests.ConnectionError("down")
+    assert core.lookup_reccobeats(s, [{"isrc": "A1"}]) is None
 
 
 def test_songs_nobody_knew_are_retried_once_with_a_new_source(tmp_path):

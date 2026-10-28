@@ -1,9 +1,10 @@
-"""Core logic: title clean-up, BPM lookup via Deezer and GetSongBPM, caching and cadence matching.
+"""Core logic: title clean-up, BPM lookup, caching and cadence matching.
 
 Nothing in here knows about the web UI, so the CLI and the server share it.
 
-Tempo data: Deezer API, https://developers.deezer.com (free, no key needed), and optionally the
-GetSongBPM API, https://getsongbpm.com/api (its terms require a link back to getsongbpm.com).
+Tempo data (all free): ReccoBeats API, https://reccobeats.com (no key), Deezer API,
+https://developers.deezer.com (no key), and optionally the GetSongBPM API,
+https://getsongbpm.com/api (its terms require a link back to getsongbpm.com).
 HTTP: Requests, https://github.com/psf/requests (Apache-2.0)
 """
 
@@ -21,6 +22,7 @@ import requests
 
 GETSONGBPM_URL = "https://api.getsong.co/search/"
 DEEZER_URL = "https://api.deezer.com/"
+RECCOBEATS_URL = "https://api.reccobeats.com/v1/"
 REQUEST_PAUSE = 0.4  # seconds between lookups, to stay friendly with the API's rate limit
 
 
@@ -37,7 +39,7 @@ class Track:
     artist: str
     duration: int = 0          # seconds
     bpm: int | None = None
-    bpm_source: str = ""       # "getsongbpm", "deezer", "manual" or ""
+    bpm_source: str = ""       # "getsongbpm", "reccobeats", "deezer", "manual" or ""
     genres: list[str] = field(default_factory=list)  # artist genres (GetSongBPM) or album genres (Deezer)
 
     @property
@@ -147,7 +149,11 @@ def make_getsongbpm_lookup(api_key: str, session: requests.Session | None = None
 
 
 def make_lookup(api_key: str = "", session: requests.Session | None = None) -> LookupFn:
-    """GetSongBPM first when there's a key (its genres are finer), then Deezer for the rest."""
+    """GetSongBPM first when there's a key (its genres are finer), then ReccoBeats, then Deezer.
+
+    ReccoBeats has Spotify's tempo data, which covers far more recent songs than Deezer, but it
+    can't search by name: it's looked up by the ISRC code of the songs Deezer finds.
+    """
     session = session or requests.Session()
     albums: dict[int, list[str]] = {}
 
@@ -156,10 +162,14 @@ def make_lookup(api_key: str = "", session: requests.Session | None = None) -> L
             res = lookup_song(session, api_key, title, artist)
             if res:
                 return res[0], res[1], "getsongbpm"
-        res = lookup_deezer(session, title, artist, albums)
+        candidates = deezer_candidates(session, title, artist)
+        res = lookup_reccobeats(session, candidates, albums)
+        if res:
+            return res[0], res[1], "reccobeats"
+        res = lookup_deezer(session, title, artist, albums, candidates=candidates)
         return (res[0], res[1], "deezer") if res else None
 
-    lookup.sources = ("getsongbpm", "deezer") if api_key else ("deezer",)
+    lookup.sources = (("getsongbpm",) if api_key else ()) + ("reccobeats", "deezer")
     return lookup
 
 
@@ -233,12 +243,10 @@ def _deezer_get(session, path: str, params: dict | None = None) -> dict | None:
     return None
 
 
-def lookup_deezer(session, title: str, artist: str, albums: dict | None = None):
-    """Ask Deezer for one song. Returns (bpm, album genres), or None if not found.
+def deezer_candidates(session, title: str, artist: str) -> list[dict]:
+    """Deezer search results whose title and artist match, best first.
 
-    Search results don't include tempo, so this fetches the best few matches one by one: many
-    tracks have bpm 0 (unknown), and another release of the same song often has it. Deezer's
-    'artist:"…" track:"…"' search syntax currently finds nothing, so this uses a plain search.
+    Deezer's 'artist:"…" track:"…"' search syntax currently finds nothing, so this uses a plain search.
     """
     body = _deezer_get(session, "search", {"q": f"{artist} {title}", "limit": 15})
     want_title, want_artist = _norm(title), _norm(artist)
@@ -249,6 +257,55 @@ def lookup_deezer(session, title: str, artist: str, albums: dict | None = None):
         artist_ok = bool(want_artist and r_artist) and (want_artist in r_artist or r_artist in want_artist)
         if want_title in r_titles and artist_ok:
             candidates.append(r)
+    return candidates
+
+
+def lookup_reccobeats(session, candidates: list[dict], albums: dict | None = None):
+    """Ask ReccoBeats for the tempo of the best few Deezer matches, by ISRC, in one request.
+
+    Returns (bpm, album genres from Deezer), or None. If ReccoBeats is down this returns None,
+    so Deezer still gets a go.
+    """
+    candidates = [r for r in candidates[:3] if r.get("isrc")]
+    if not candidates:
+        return None
+    ids = ",".join(dict.fromkeys(r["isrc"] for r in candidates))
+    try:
+        for attempt in range(3):
+            resp = session.get(RECCOBEATS_URL + "audio-features", params={"ids": ids}, timeout=20)
+            if resp.status_code == 429:  # rate limited - back off and retry
+                time.sleep(5 * (attempt + 1))
+                continue
+            resp.raise_for_status()
+            break
+        else:
+            return None
+        body = resp.json()
+    except (requests.RequestException, ValueError):
+        return None
+    tempos = {}
+    for f in (body.get("content") if isinstance(body, dict) else None) or []:
+        if f.get("isrc") and f.get("tempo"):
+            tempos.setdefault(f["isrc"], f["tempo"])
+    for r in candidates:
+        try:
+            bpm = int(round(float(tempos.get(r["isrc"]) or 0)))
+        except (TypeError, ValueError):
+            bpm = 0
+        if bpm:
+            return bpm, _deezer_album_genres(session, (r.get("album") or {}).get("id"), albums)
+    return None
+
+
+def lookup_deezer(session, title: str, artist: str, albums: dict | None = None,
+                  candidates: list[dict] | None = None):
+    """Ask Deezer for one song. Returns (bpm, album genres), or None if not found.
+
+    Search results don't include tempo, so this fetches the best few matches one by one: many
+    tracks have bpm 0 (unknown), and another release of the same song often has it.
+    """
+    if candidates is None:
+        candidates = deezer_candidates(session, title, artist)
     for r in candidates[:3]:
         track = _deezer_get(session, f"track/{r['id']}") or {}
         try:
